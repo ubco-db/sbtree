@@ -148,7 +148,7 @@ int8_t int32Comparator(
 void runalltests_sbtree()
 {
     int8_t M = 2;    
-    int32_t numRecords = 70;
+    int32_t numRecords = 100;
 
     /* Configure SBTree state */
     sbtreeState* state = malloc(sizeof(sbtreeState));
@@ -169,8 +169,9 @@ void runalltests_sbtree()
         return;
     }
     state->file = fp;
-    state->parameters = SBTREE_USE_INDEX | SBTREE_USE_BMAP;
-    
+   // state->parameters = SBTREE_USE_INDEX | SBTREE_USE_BMAP;
+     state->parameters = 0;
+
     /* TODO: Setup for data and bitmap comparison functions */
     state->inBitmap = inBitmapInt8Bucket;
     state->updateBitmap = updateBitmapInt8Bucket;
@@ -202,6 +203,7 @@ void runalltests_sbtree()
     for (i = 0; i < numRecords; i++)
     {        
         *((int32_t*) recordBuffer) = i;
+        *((int32_t*) (recordBuffer+4)) = i;
 /*        
         // Check min/max just before reaching buffer fills up and is flushed
         if (i % state->maxRecordsPerPage == 0) {
@@ -227,7 +229,7 @@ void runalltests_sbtree()
         max = *recordBuffer;
         */
         // sbtreeInsertRec(state, 1000000+i, recordBuffer);        
-        sbtreeInsert(state, 1000000+i, recordBuffer, recordBuffer + 4);        
+        sbtreeInsert(state, recordBuffer, (void*) (recordBuffer + 4));          
     }    
 
     int16_t minMaxSumError = sumErr + maxErr + minErr;

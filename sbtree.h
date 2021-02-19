@@ -2,7 +2,7 @@
 /**
 @file		sbtree.h
 @author		Ramon Lawrence
-@brief		This file is for sequential B-tree.
+@brief		Implementation for sequential, copy-on-write B-tree.
 @copyright	Copyright 2021
 			The University of British Columbia,		
 @par Redistribution and use in source and binary forms, with or without
@@ -40,39 +40,42 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 
-#define SBTREE_USE_INDEX		1
+/* Define type for page ids (physical and logical). */
+typedef uint32_t id_t;
+
+/* Define type for page record count. */
+typedef uint16_t count_t;
+
+#define SBTREE_USE_INDEX	1
 #define SBTREE_USE_MAX_MIN	2
-#define SBTREE_USE_BMAP		8
-#define SBTREE_INTERIOR		16
-#define SBTREE_ROOT			32
+#define SBTREE_USE_BMAP		4
 
 #define SBTREE_USING_INDEX(x)  	x & SBTREE_USE_INDEX
-#define SBTREE_USING_MAX_MIN(x)  x & SBTREE_USE_MAX_MIN
+#define SBTREE_USING_MAX_MIN(x) x & SBTREE_USE_MAX_MIN
 #define SBTREE_USING_BMAP(x)  	x & SBTREE_USE_BMAP
 
 /* Offsets with header */
-#define SBTREE_COUNT_OFFSET		12
-#define SBTREE_MAX_OFFSET		14
-#define SBTREE_MIN_OFFSET		16
+#define SBTREE_COUNT_OFFSET		sizeof(id_t)
 
 /* MOD 10000 to remove any flags in count that are set above 10000 */
-#define SBTREE_GET_ID(x)  		*((int32_t *) (x)) 
-#define SBTREE_GET_COUNT(x)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) % 10000
-#define SBTREE_SET_COUNT(x,y)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) = y
-#define SBTREE_INC_COUNT(x)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) = *((int16_t *) (x+SBTREE_COUNT_OFFSET))+1
-#define SBTREE_GET_MAX(x)		*((int16_t *) (x+SBTREE_MAX_OFFSET))
-#define SBTREE_UPDATE_MAX(x, y)  (*((int16_t *) (x+SBTREE_MAX_OFFSET)) < *((int16_t *) (y))) ? *((int16_t *) (x+SBTREE_MAX_OFFSET)) = *((int16_t *) (y)):*((int16_t *) (x+SBTREE_MAX_OFFSET))
-#define SBTREE_GET_MIN(x)		*((int16_t *) (x+SBTREE_MIN_OFFSET))
-#define SBTREE_UPDATE_MIN(x, y)  (*((int16_t *) (x+SBTREE_MIN_OFFSET)) > *((int16_t *) (y))) ? *((int16_t *) (x+SBTREE_MIN_OFFSET)) = *((int16_t *) (y)):*((int16_t *) (x+SBTREE_MIN_OFFSET))
+#define SBTREE_GET_ID(x)  		*((id_t *) (x)) 
+#define SBTREE_GET_COUNT(x)  	*((count_t *) (x+SBTREE_COUNT_OFFSET)) % 10000
+#define SBTREE_SET_COUNT(x,y)  	*((count_t *) (x+SBTREE_COUNT_OFFSET)) = y
+#define SBTREE_INC_COUNT(x)  	*((count_t *) (x+SBTREE_COUNT_OFFSET)) = *((count_t *) (x+SBTREE_COUNT_OFFSET))+1
 
-#define SBTREE_GET_BITMAP(x,y)  	*((uint8_t *)  (y+x->bmOffset))
-
-/* Note: Using count field above 10000 for interior node and 20000 for root node */
+/* Using count field above 10000 for interior node and 20000 for root node */
 #define SBTREE_IS_INTERIOR(x)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 10000 ? 1 : 0
 #define SBTREE_IS_ROOT(x)  		*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 20000 ? 1 : 0
 #define SBTREE_SET_INTERIOR(x) 	SBTREE_SET_COUNT(x,*((int16_t *) (x+SBTREE_COUNT_OFFSET))+10000)
 #define SBTREE_SET_ROOT(x) 		SBTREE_SET_COUNT(x,*((int16_t *) (x+SBTREE_COUNT_OFFSET))+20000)
 
+/*
+#define SBTREE_GET_MAX(x)		*((int16_t *) (x+SBTREE_MAX_OFFSET))
+#define SBTREE_UPDATE_MAX(x, y)  (*((int16_t *) (x+SBTREE_MAX_OFFSET)) < *((int16_t *) (y))) ? *((int16_t *) (x+SBTREE_MAX_OFFSET)) = *((int16_t *) (y)):*((int16_t *) (x+SBTREE_MAX_OFFSET))
+#define SBTREE_GET_MIN(x)		*((int16_t *) (x+SBTREE_MIN_OFFSET))
+#define SBTREE_UPDATE_MIN(x, y)  (*((int16_t *) (x+SBTREE_MIN_OFFSET)) > *((int16_t *) (y))) ? *((int16_t *) (x+SBTREE_MIN_OFFSET)) = *((int16_t *) (y)):*((int16_t *) (x+SBTREE_MIN_OFFSET))
+#define SBTREE_GET_BITMAP(x,y)  	*((uint8_t *)  (y+x->bmOffset))
+*/
 
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
 #define BYTE_TO_BINARY(byte)  \
@@ -88,25 +91,25 @@ extern "C" {
 typedef struct {
 	FILE *file;									/* File for storing data records. TODO: Will be replaced with RAW memory access routines. */
 	void *buffer;								/* Pre-allocated memory buffer for use by algorithm */
-	int8_t bufferSizeInBlocks;					/* Size of buffer in blocks */
-	int16_t pageSize;							/* Size of physical page on device */
-	int8_t parameters;    						/* Parameter flags for indexing and bitmaps */
-	int8_t keySize;								/* Size of key in bytes (fixed-size records) */
-	int8_t dataSize;							/* Size of data in bytes (fixed-size records) */
-	int8_t recordSize;							/* Size of record in bytes (fixed-size records) */
-	int8_t headerSize;							/* Size of header in bytes (calculated during init()) */
-	int32_t nextPageId;							/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
-	int16_t maxRecordsPerPage;					/* Maximum records per page */
-	int16_t maxInteriorRecordsPerPage;			/* Maximum interior records per page */
-	int8_t bmOffset;							/* Offset of bitmap in header from start of block */
+	uint8_t bufferSizeInBlocks;					/* Size of buffer in blocks */
+	uint16_t pageSize;							/* Size of physical page on device */
+	uint8_t parameters;    						/* Parameter flags for indexing and bitmaps */
+	uint8_t keySize;							/* Size of key in bytes (fixed-size records) */
+	uint8_t dataSize;							/* Size of data in bytes (fixed-size records) */
+	uint8_t recordSize;							/* Size of record in bytes (fixed-size records) */
+	uint8_t headerSize;							/* Size of header in bytes (calculated during init()) */
+	id_t nextPageId;							/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
+	uint16_t maxRecordsPerPage;					/* Maximum records per page */
+	uint16_t maxInteriorRecordsPerPage;			/* Maximum interior records per page */
+	uint8_t bmOffset;							/* Offset of bitmap in header from start of block */
     int8_t (*compareData)(void *a, void *b);	/* Function that compares two arbitrary data values passed as parameters */
 	void (*extractData)(void *data);			/* Given a record, function that extracts the data (key) value from that record */
 	void (*updateBitmap)(void *data, void *bm);	/* Given a record, updates bitmap based on its data (key) value */
 	int8_t (*inBitmap)(void *data, void *bm);	/* Returns 1 if data (key) value is a valid value given the bitmap */
 	void (*buildBitmap)(void *min, void *max, void *bm);	/* Builds a query bitmap given [min,max] range of keys */
-	int8_t levels;								/* Number of levels in tree */
-	int32_t activePath[5];						/* Active path of page indexes from root (in position 0) to node just above leaf */
-	int32_t nextPageWriteId;					/* Physical page id of next page to write. */
+	uint8_t levels;								/* Number of levels in tree */
+	id_t activePath[5];							/* Active path of page indexes from root (in position 0) to node just above leaf */
+	id_t nextPageWriteId;						/* Physical page id of next page to write. */
 } sbtreeState;
 
 typedef struct {
@@ -132,28 +135,15 @@ typedef struct {
 void sbtreeInit(sbtreeState *state);
 
 /**
-@brief     	Inserts a given record into structure.
-@param     	state
-                SBTree algorithm state structure
-@param     	timestamp
-                Integer timestamp (increasing)
-@param     	record
-                Record consisting of key bytes then data bytes
-*/
-void sbtreeInsertRec(sbtreeState *state, int32_t timestamp, void* data);
-
-/**
 @brief     	Inserts a given key, data pair into structure.
 @param     	state
                 SBTree algorithm state structure
-@param     	timestamp
-                Integer timestamp (increasing)
 @param     	key
                 Key for record
 @param     	data
                 Data for record
 */
-void sbtreeInsert(sbtreeState *state, int32_t timestamp, void* key, void *data);
+void sbtreeInsert(sbtreeState *state, void* key, void *data);
 
 /**
 @brief     	Initialize iterator on SBTREE structure.
@@ -161,7 +151,6 @@ void sbtreeInsert(sbtreeState *state, int32_t timestamp, void* key, void *data);
                 SBTree algorithm state structure
 */
 void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it);
-
 
 /**
 @brief     	Initialize iterator on SBTREE structure.
@@ -190,10 +179,29 @@ void sbtreeRangeQuery(sbtreeState *state, void *minRange, void *maxRange);
 */
 int8_t sbtreeFlush(sbtreeState *state);
 
+/**
+@brief     	Prints SBTree structure to standard output.
+@param     	state
+                SBTree algorithm state structure
+*/
 void sbtreePrint(sbtreeState *state);
 
+/**
+@brief      Reads page from storage. Returns 0 if success.
+@param     	state
+                SBTree algorithm state structure
+@param     	pageNum
+                Physical page id (number)
+*/
 int8_t readPage(sbtreeState *state, int32_t pageNum);
 
+/**
+@brief      Writes page to storage. Returns physical page id if success. -1 if failure.
+@param     	state
+                SBTree algorithm state structure
+@param     	buffer
+                In memory buffer containing page
+*/
 int32_t writePage(sbtreeState *state, void *buffer);
 
 #if defined(__cplusplus)
