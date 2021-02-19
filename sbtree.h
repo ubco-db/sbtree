@@ -102,7 +102,7 @@ typedef struct {
 	uint16_t maxRecordsPerPage;					/* Maximum records per page */
 	uint16_t maxInteriorRecordsPerPage;			/* Maximum interior records per page */
 	uint8_t bmOffset;							/* Offset of bitmap in header from start of block */
-    int8_t (*compareData)(void *a, void *b);	/* Function that compares two arbitrary data values passed as parameters */
+    int8_t (*compareKey)(void *a, void *b);		/* Function that compares two arbitrary keys passed as parameters */
 	void (*extractData)(void *data);			/* Given a record, function that extracts the data (key) value from that record */
 	void (*updateBitmap)(void *data, void *bm);	/* Given a record, updates bitmap based on its data (key) value */
 	int8_t (*inBitmap)(void *data, void *bm);	/* Returns 1 if data (key) value is a valid value given the bitmap */
@@ -110,6 +110,7 @@ typedef struct {
 	uint8_t levels;								/* Number of levels in tree */
 	id_t activePath[5];							/* Active path of page indexes from root (in position 0) to node just above leaf */
 	id_t nextPageWriteId;						/* Physical page id of next page to write. */
+	void *tempKey;								/* Used to temporarily store a key value. Space must be preallocated. */
 } sbtreeState;
 
 typedef struct {
@@ -135,15 +136,30 @@ typedef struct {
 void sbtreeInit(sbtreeState *state);
 
 /**
-@brief     	Inserts a given key, data pair into structure.
+@brief     	Puts a given key, data pair into structure.
 @param     	state
                 SBTree algorithm state structure
 @param     	key
                 Key for record
 @param     	data
                 Data for record
+@return		Return 0 if success. Non-zero value if error.
 */
-void sbtreeInsert(sbtreeState *state, void* key, void *data);
+int8_t sbtreePut(sbtreeState *state, void* key, void *data);
+
+/**
+@brief     	Given a key, returns data associated with key.
+			Note: Space for data must be already allocated.
+			Data is copied from database into data buffer.
+@param     	state
+                SBTree algorithm state structure
+@param     	key
+                Key for record
+@param     	data
+                Pre-allocated memory to copy data for record
+@return		Return 0 if success. Non-zero value if error.
+*/
+int8_t sbtreeGet(sbtreeState *state, void* key, void *data);
 
 /**
 @brief     	Initialize iterator on SBTREE structure.

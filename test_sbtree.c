@@ -158,7 +158,8 @@ void runalltests_sbtree()
     state->dataSize = 12;
     state->pageSize = 512;
     state->bufferSizeInBlocks = M;
-    state->buffer  = malloc((size_t) state->bufferSizeInBlocks * state->pageSize);    
+    state->buffer  = malloc((size_t) state->bufferSizeInBlocks * state->pageSize);   
+    state->tempKey = malloc(sizeof(int32_t)); 
     int8_t* recordBuffer = malloc(state->recordSize);
 
     /* Setup output file. TODO: Will replace with direct memory access. */
@@ -175,7 +176,7 @@ void runalltests_sbtree()
     /* TODO: Setup for data and bitmap comparison functions */
     state->inBitmap = inBitmapInt8Bucket;
     state->updateBitmap = updateBitmapInt8Bucket;
-    state->compareData = int32Comparator;
+    state->compareKey = int32Comparator;
     state->buildBitmap = buildBitmapInt8BucketWithRange;
 
     /* Initialize SBTree structure with parameters */
@@ -229,7 +230,10 @@ void runalltests_sbtree()
         max = *recordBuffer;
         */
         // sbtreeInsertRec(state, 1000000+i, recordBuffer);        
-        sbtreeInsert(state, recordBuffer, (void*) (recordBuffer + 4));          
+        sbtreePut(state, recordBuffer, (void*) (recordBuffer + 4));    
+
+        if (i % 10 == 0)
+            sbtreePrint(state);      
     }    
 
     int16_t minMaxSumError = sumErr + maxErr + minErr;
@@ -246,6 +250,11 @@ void runalltests_sbtree()
 
     sbtreePrint(state);
 
+    int32_t key = 75;
+    sbtreeGet(state, &key, &recordBuffer);
+    printf("Key: %d Data: %d\n", key, *((int32_t*) recordBuffer));
+
+/*
     test_record_t *rec;
     sbtreeIterator it;
     int mv = 40;     // For all records, select mv = 1.
@@ -275,7 +284,7 @@ void runalltests_sbtree()
     else
         printf("FAILURE\n");    
     
-
+*/
     /* Perform various queries to test performance */
 
 

@@ -42,6 +42,35 @@
 #include "sbtree.h"
 
 
+/*
+Comparison functions. Code is adapted from ldbm.
+*/
+
+/**
+@brief     	Compares two unsigned int32_t values.
+@param     	a
+                value 1
+@param     b
+                value 2
+*/
+static int8_t uint32Compare(void *a, void *b)
+{
+	return *((uint32_t*)a) - *((uint32_t*)b);	
+}
+
+
+/**
+@brief     	Compares two values by bytes. 
+@param     	a
+                value 1
+@param     b
+                value 2
+*/
+static int8_t byteCompare(void *a, void *b, int16_t size)
+{
+	return memcmp(a, b, size);	
+}
+
 /**
 @brief     	Initialize in-memory buffer page.
 @param     	state
@@ -78,6 +107,8 @@ void sbtreeInit(sbtreeState *state)
 	/* TODO: These values would be set during recovery if database already exists. */
 	state->nextPageId = 0;
 	state->nextPageWriteId = 0;
+
+	state->compareKey = uint32Compare;
 
 	/* Calculate block header size */
 	/* Header size fixed: 14 bytes: 4 byte id, 2 for record count. */
@@ -150,6 +181,17 @@ void sbtreePrintNodeBuffer(sbtreeState *state, int pageNum, int depth, void *buf
 	if (SBTREE_IS_INTERIOR(buffer))
 	{		
 		printf("%*cId: %d Page: %d Cnt: %d [%d, %d]\n", depth*3, ' ', SBTREE_GET_ID(buffer), pageNum, count, (SBTREE_IS_ROOT(buffer)), SBTREE_IS_INTERIOR(buffer));		
+		/* Print data records (optional) */	
+		printf("%*c", depth*3+2, ' ');	
+		for (int c=0; c < count; c++)
+		{			
+			int32_t key = *((int32_t*) (buffer+state->keySize * c + state->headerSize));
+			int32_t val = *((int32_t*) (buffer+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + c*sizeof(id_t)));
+			printf(" (%d, %d)", key, val);			
+		}
+		/* Print last pointer */
+		int32_t val = *((int32_t*) (buffer+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + count*sizeof(id_t)));
+		printf(" (, %d)\n", val);
 	}
 	else
 	{		
@@ -188,7 +230,7 @@ void sbtreePrintNode(sbtreeState *state, int pageNum, int depth)
 		for (int c=0; c < count; c++)
 		{
 			int32_t key = *((int32_t*) (buf+state->keySize * c + state->headerSize));
-			int32_t val = *((int32_t*) (buf+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + c*sizeof(int32_t)));
+			int32_t val = *((int32_t*) (buf+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + c*sizeof(id_t)));
 			if (c == count-1 && depth+1 < state->levels && pageNum == state->activePath[depth])
 			{	/* Current pointer is on active path. */
 				if (state->activePath[depth+1] != val)
@@ -271,7 +313,8 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 			/* Copy record onto page */
 			/* Record is key just trying to insert (as above values already in block) and pageNum just written with previous data page */
 			/* Keep keys and data as contiguous sorted arrays */
-			if (count < state->maxInteriorRecordsPerPage - 1)
+			/* TODO: Evaluate if benefit for storing key for last child pointer or not. */
+	//		if (count < state->maxInteriorRecordsPerPage - 1)
 			{	/* Do not store key for last child pointer */ 
 				memcpy(buf + state->keySize * count + state->headerSize, key, state->keySize);
 			}
@@ -298,17 +341,17 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 		initBufferPage(state, 0);
 
 		/* Copy record onto page (minkey, prevPageNum) */
-		memcpy(state->buffer + state->headerSize, minkey, state->keySize);
-		memcpy(state->buffer + state->keySize * state->maxInteriorRecordsPerPage + state->headerSize, &prevPageNum, sizeof(id_t));
+		memcpy(state->buffer + state->headerSize, minkey, state->keySize);		
+		memcpy(state->buffer + state->headerSize + state->keySize * state->maxInteriorRecordsPerPage, &prevPageNum, sizeof(id_t));
 		
 		/* Copy greater than record on to page. Note: Basically child pointer and infinity for key */		
-		int32_t maxKey = INT_MAX;
-		memcpy(state->buffer + state->headerSize, &maxKey, state->keySize);
+		// int32_t maxKey = INT_MAX;
+		// memcpy(state->buffer + state->headerSize + state->keySize, &maxKey, state->keySize);
 		memcpy(state->buffer + state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + sizeof(id_t), &state->activePath[0], sizeof(id_t));		
 
 		/* Update count */
 		SBTREE_INC_COUNT(state->buffer);	
-		SBTREE_INC_COUNT(state->buffer);	
+		// SBTREE_INC_COUNT(state->buffer);	
 		SBTREE_SET_ROOT(state->buffer);
 		
 		for (l=state->levels; l > 0; l--)
@@ -319,15 +362,16 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 }
 
 /**
-@brief     	Inserts a given key, data pair into structure.
+@brief     	Puts a given key, data pair into structure.
 @param     	state
                 SBTree algorithm state structure
 @param     	key
                 Key for record
 @param     	data
                 Data for record
+@return		Return 0 if success. Non-zero value if error.
 */
-void sbtreeInsert(sbtreeState *state, void* key, void *data)
+int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 {		
 	int16_t count =  SBTREE_GET_COUNT(state->buffer); 
 
@@ -338,8 +382,10 @@ void sbtreeInsert(sbtreeState *state, void* key, void *data)
 		int32_t pageNum = writePage(state, state->buffer);				
 
 		/* Add pointer to page to B-tree structure */
-		/* Second pointer paramter is minimum key in currently full leaf node of data */
-		sbtreeUpdateIndex(state, (void*) (state->buffer+state->headerSize), key, pageNum);
+		/* Second pointer parameter is minimum key in currently full leaf node of data */
+		/* Need to copy key from current write buffer as will reuse buffer */
+		memcpy(state->tempKey, (void*) (state->buffer+state->headerSize), state->keySize); 
+		sbtreeUpdateIndex(state, state->tempKey, key, pageNum);
 
 		count = 0;			
 		initBufferPage(state, 0);					
@@ -368,6 +414,103 @@ void sbtreeInsert(sbtreeState *state, void* key, void *data)
 	// printf("\n");
 
 	// sbtreePrintNodeBuffer(state, 0, 0, state->buffer);
+	return 0;
+}
+
+/**
+@brief     	Given a key, searches the node for the key.
+			If interior node, returns pointer to next page id to follow.
+			If leaf node, returns pointer to first record with that key.
+			Returns NULL if key is not found.			
+@param     	state
+                SBTree algorithm state structure
+@param     	buffer
+                Pointer to in-memory buffer holding node
+@param     	key
+                Key for record
+*/
+void* sbtreeSearchNode(sbtreeState *state, void *buffer, void* key)
+{
+	int16_t first, last, middle, count;
+	int8_t compare, interior;
+	void *mkey;
+
+	first = 0;
+	count = SBTREE_GET_COUNT(buffer);
+  	last =  count - 1;
+  	middle = (first+last)/2;
+	interior = SBTREE_IS_INTERIOR(buffer);
+
+	if (interior)
+	{
+		while (first <= last) 
+		{			
+			mkey = buffer+state->headerSize+state->keySize*(middle-1);
+			compare = state->compareKey(mkey, key);
+			if (compare < 0)
+				first = middle + 1;
+			else if (compare == 0) 
+				return buffer + state->headerSize + state->keySize*count +state->dataSize*(middle-1);						
+			else
+				last = middle - 1;
+
+			middle = (first + last)/2;
+		}
+		return NULL;
+	}
+	else
+	{
+		while (first <= last) 
+		{			
+			mkey = buffer+state->headerSize+state->recordSize*(middle-1);
+			compare = state->compareKey(mkey, key);
+			if (compare < 0)
+				first = middle + 1;
+			else if (compare == 0) 
+				return mkey;
+			else
+				last = middle - 1;
+
+			middle = (first + last)/2;
+		}
+		return NULL;
+	}
+}
+
+
+/**
+@brief     	Given a key, returns data associated with key.
+			Note: Space for data must be already allocated.
+			Data is copied from database into data buffer.
+@param     	state
+                SBTree algorithm state structure
+@param     	key
+                Key for record
+@param     	data
+                Pre-allocated memory to copy data for record
+@return		Return 0 if success. Non-zero value if error.
+*/
+int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
+{
+	/* Starting at root search for key */
+	int8_t l;
+	void* next, *buf;;
+
+	for (l=0; l < state->levels-1; l++)
+	{		
+		readPage(state, state->activePath[l]);
+		buf = state->buffer + state->pageSize;
+
+		/* Find the key within the node. Sorted by key. Use binary search. */
+		next = sbtreeSearchNode(state, buf, key);
+
+		if (next != NULL)
+		{
+			int32_t* nextId = (int32_t*) next;
+			printf("Next page: %d\n", *nextId);
+		}
+	}
+	return 0;
 }
 
 /**
@@ -453,11 +596,14 @@ int8_t sbtreeFlush(sbtreeState *state)
 {
 	int32_t pageNum = writePage(state, state->buffer);	
 
+sbtreePrint(state);
 	/* Add pointer to page to B-tree structure */		
 	/* So do not have to allocate memory. Use the next key value in the buffer temporarily to store a MAX_KEY of all 1 bits */	
+	/* Need to copy key from current write buffer as will reuse buffer */
+	memcpy(state->tempKey, (void*) (state->buffer+state->headerSize), state->keySize); 	
 	void *maxkey = state->buffer + state->recordSize * SBTREE_GET_COUNT(state->buffer) + state->headerSize;
 	memset(maxkey, 1, state->keySize);
-	sbtreeUpdateIndex(state, (void*) (state->buffer+state->headerSize), maxkey, pageNum);
+	sbtreeUpdateIndex(state, state->tempKey, maxkey, pageNum);
 
 	/* Reinitialize buffer */
 	initBufferPage(state, 0);
@@ -540,9 +686,9 @@ int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **data)
 		
 		//printf("Key: %d\n", **((int32_t**) data));
 		/* TODO: Check that record meets filter constraints */
-		if (it->minKey != NULL && state->compareData(*data, it->minKey) < 0)
+		if (it->minKey != NULL && state->compareKey(*data, it->minKey) < 0)
 			continue;
-		if (it->maxKey != NULL && state->compareData(*data, it->maxKey) > 0)
+		if (it->maxKey != NULL && state->compareKey(*data, it->maxKey) > 0)
 			continue;
 		return 1;
 	}
