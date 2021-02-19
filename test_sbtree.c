@@ -148,7 +148,7 @@ int8_t int32Comparator(
 void runalltests_sbtree()
 {
     int8_t M = 2;    
-    int32_t numRecords = 1500;
+    int32_t numRecords = 70;
 
     /* Configure SBTree state */
     sbtreeState* state = malloc(sizeof(sbtreeState));

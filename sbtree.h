@@ -56,6 +56,7 @@ extern "C" {
 #define SBTREE_MIN_OFFSET		16
 
 /* MOD 10000 to remove any flags in count that are set above 10000 */
+#define SBTREE_GET_ID(x)  		*((int32_t *) (x)) 
 #define SBTREE_GET_COUNT(x)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) % 10000
 #define SBTREE_SET_COUNT(x,y)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) = y
 #define SBTREE_INC_COUNT(x)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) = *((int16_t *) (x+SBTREE_COUNT_OFFSET))+1
@@ -94,7 +95,7 @@ typedef struct {
 	int8_t dataSize;							/* Size of data in bytes (fixed-size records) */
 	int8_t recordSize;							/* Size of record in bytes (fixed-size records) */
 	int8_t headerSize;							/* Size of header in bytes (calculated during init()) */
-	int32_t lastBlockId;						/* Last block id. Block id is an incrementing value. */
+	int32_t nextPageId;							/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
 	int16_t maxRecordsPerPage;					/* Maximum records per page */
 	int16_t maxInteriorRecordsPerPage;			/* Maximum interior records per page */
 	int8_t bmOffset;							/* Offset of bitmap in header from start of block */
@@ -105,7 +106,7 @@ typedef struct {
 	void (*buildBitmap)(void *min, void *max, void *bm);	/* Builds a query bitmap given [min,max] range of keys */
 	int8_t levels;								/* Number of levels in tree */
 	int32_t activePath[5];						/* Active path of page indexes from root (in position 0) to node just above leaf */
-	int32_t nextPageWriteId;					/* Page id of next page to write. */
+	int32_t nextPageWriteId;					/* Physical page id of next page to write. */
 } sbtreeState;
 
 typedef struct {
@@ -193,7 +194,7 @@ void sbtreePrint(sbtreeState *state);
 
 int8_t readPage(sbtreeState *state, int32_t pageNum);
 
-int8_t writePage(sbtreeState *state, void *buffer, int32_t pageNum);
+int32_t writePage(sbtreeState *state, void *buffer);
 
 #if defined(__cplusplus)
 }
