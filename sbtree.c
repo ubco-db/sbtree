@@ -285,7 +285,7 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 		buf = state->buffer+state->pageSize;
 		count =  SBTREE_GET_COUNT(buf); 
 				
-		if (count >= state->maxInteriorRecordsPerPage)
+		if (count > state->maxInteriorRecordsPerPage)
 		{	/* Interior node at this level is full. Create a new node. */	
 
 			/* If tree is beyond level 1, update parent node last child pointer as will have changed. Currently in buffer. */
@@ -314,7 +314,7 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 			/* Record is key just trying to insert (as above values already in block) and pageNum just written with previous data page */
 			/* Keep keys and data as contiguous sorted arrays */
 			/* TODO: Evaluate if benefit for storing key for last child pointer or not. */
-	//		if (count < state->maxInteriorRecordsPerPage - 1)
+			if (count < state->maxInteriorRecordsPerPage)
 			{	/* Do not store key for last child pointer */ 
 				memcpy(buf + state->keySize * count + state->headerSize, key, state->keySize);
 			}
