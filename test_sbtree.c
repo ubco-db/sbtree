@@ -148,7 +148,7 @@ int8_t int32Comparator(
 void runalltests_sbtree()
 {
     int8_t M = 2;    
-    int32_t numRecords = 100;
+    int32_t numRecords = 300;
 
     /* Configure SBTree state */
     sbtreeState* state = malloc(sizeof(sbtreeState));
@@ -233,7 +233,11 @@ void runalltests_sbtree()
         sbtreePut(state, recordBuffer, (void*) (recordBuffer + 4));    
 
         if (i % 10 == 0)
-            sbtreePrint(state);      
+        {
+            printf("KEY: %d\n",i);
+            sbtreePrint(state);   
+        }
+               
     }    
 
     int16_t minMaxSumError = sumErr + maxErr + minErr;

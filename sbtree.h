@@ -64,8 +64,8 @@ typedef uint16_t count_t;
 #define SBTREE_INC_COUNT(x)  	*((count_t *) (x+SBTREE_COUNT_OFFSET)) = *((count_t *) (x+SBTREE_COUNT_OFFSET))+1
 
 /* Using count field above 10000 for interior node and 20000 for root node */
-#define SBTREE_IS_INTERIOR(x)  	*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 10000 ? 1 : 0
-#define SBTREE_IS_ROOT(x)  		*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 20000 ? 1 : 0
+#define SBTREE_IS_INTERIOR(x)  	(*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 10000 ? 1 : 0)
+#define SBTREE_IS_ROOT(x)  		(*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 20000 ? 1 : 0)
 #define SBTREE_SET_INTERIOR(x) 	SBTREE_SET_COUNT(x,*((int16_t *) (x+SBTREE_COUNT_OFFSET))+10000)
 #define SBTREE_SET_ROOT(x) 		SBTREE_SET_COUNT(x,*((int16_t *) (x+SBTREE_COUNT_OFFSET))+20000)
 
