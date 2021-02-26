@@ -205,39 +205,15 @@ void runalltests_sbtree()
     {        
         *((int32_t*) recordBuffer) = i;
         *((int32_t*) (recordBuffer+4)) = i;
-/*        
-        // Check min/max just before reaching buffer fills up and is flushed
-        if (i % state->maxRecordsPerPage == 0) {
-
-         //   printf("Calculated Sum : Actual Sum: %d : %d\n", SBTREE_GET_SUM(state->buffer), sum);
-            printf("Calculated Max : Actual Max: %d : %d\n", SBTREE_GET_MAX(state->buffer), max);
-            printf("Calculated Min : Actual Min: %d : %d\n", SBTREE_GET_MIN(state->buffer), min);
-            printf("End of buffer\n");
-
-      //      if (SBTREE_GET_SUM(state->buffer) != sum) {
-       //         sumErr = 1;
-      //      }
-            if (SBTREE_GET_MAX(state->buffer) != max) {
-                maxErr = 10;
-            }
-            if (SBTREE_GET_MIN(state->buffer) != min) {
-                minErr = 100;
-            }
-            min = *recordBuffer;
-            sum = 0;
-        }
-        sum += *recordBuffer;
-        max = *recordBuffer;
-        */
-        // sbtreeInsertRec(state, 1000000+i, recordBuffer);        
+     
         sbtreePut(state, recordBuffer, (void*) (recordBuffer + 4));    
-/*
+        /*
         if (i % 10 == 0)
         {
             printf("KEY: %d\n",i);
             sbtreePrint(state);   
         }
-               */
+        */
     }    
 
     int16_t minMaxSumError = sumErr + maxErr + minErr;
@@ -255,7 +231,6 @@ void runalltests_sbtree()
 
     /* Verify that all values can be found in tree */
     for (i = 0; i < numRecords; i++)    
-   //  for (i = 40; i < 41; i++)    
     { 
         int32_t key = i;
         int8_t result = sbtreeGet(state, &key, recordBuffer);
@@ -266,40 +241,52 @@ void runalltests_sbtree()
             printf("Key: %d Data: %d\n", key, *((int32_t*) recordBuffer));
         }
     }
+
+    int32_t key = -1;
+    int8_t result = sbtreeGet(state, &key, recordBuffer);
+    if (result == 0) 
+        printf("Error: Key found: %d\n", key);
+
+    key = 350;
+    result = sbtreeGet(state, &key, recordBuffer);
+    if (result == 0) 
+        printf("Error: Key found: %d\n", key);
+
+    printf("Complete");
     free(recordBuffer);
-/*
-    test_record_t *rec;
+    
     sbtreeIterator it;
     int mv = 40;     // For all records, select mv = 1.
     it.minKey = &mv;
-    int v = 59;
+    int v = 299;
     it.maxKey = &v;
     it.minTime = NULL;
     it.maxTime = NULL;
+    void *data;
 
     sbtreeInitIterator(state, &it);
     i = 0;
     int8_t success = 1;    
-    while (sbtreeNext(state, &it, (void**) &recordBuffer))
-    {        
-        rec = (test_record_t*) recordBuffer;        
-  //      printf("Key: %d\n", rec->key);
-        if (i+mv != rec->key)
+    int32_t *itKey, *itData;
+
+    while (sbtreeNext(state, &it, (void*) &itKey, (void*) &itData))
+    {                      
+        printf("Key: %d  Data: %d\n", *itKey, *itData);
+        if (i+mv != *itKey)
         {   success = 0;
-            printf("Key: %d Error\n", rec->key);
+            printf("Key: %d Error\n", *itKey);
         }
         i++;
     }
     printf("Read records: %d\n", i);
-    // if (success && i == numRecords)
+
     if (success && i == (v-mv+1) && !minMaxSumError)
         printf("SUCCESS\n");
     else
         printf("FAILURE\n");    
     
-*/
-    /* Perform various queries to test performance */
 
+    /* Perform various queries to test performance */
 
     fclose(state->file);
     

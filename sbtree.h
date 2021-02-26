@@ -64,18 +64,10 @@ typedef uint16_t count_t;
 #define SBTREE_INC_COUNT(x)  	*((count_t *) (x+SBTREE_COUNT_OFFSET)) = *((count_t *) (x+SBTREE_COUNT_OFFSET))+1
 
 /* Using count field above 10000 for interior node and 20000 for root node */
-#define SBTREE_IS_INTERIOR(x)  	(*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 10000 ? 1 : 0)
-#define SBTREE_IS_ROOT(x)  		(*((int16_t *) (x+SBTREE_COUNT_OFFSET)) >= 20000 ? 1 : 0)
-#define SBTREE_SET_INTERIOR(x) 	SBTREE_SET_COUNT(x,*((int16_t *) (x+SBTREE_COUNT_OFFSET))+10000)
-#define SBTREE_SET_ROOT(x) 		SBTREE_SET_COUNT(x,*((int16_t *) (x+SBTREE_COUNT_OFFSET))+20000)
-
-/*
-#define SBTREE_GET_MAX(x)		*((int16_t *) (x+SBTREE_MAX_OFFSET))
-#define SBTREE_UPDATE_MAX(x, y)  (*((int16_t *) (x+SBTREE_MAX_OFFSET)) < *((int16_t *) (y))) ? *((int16_t *) (x+SBTREE_MAX_OFFSET)) = *((int16_t *) (y)):*((int16_t *) (x+SBTREE_MAX_OFFSET))
-#define SBTREE_GET_MIN(x)		*((int16_t *) (x+SBTREE_MIN_OFFSET))
-#define SBTREE_UPDATE_MIN(x, y)  (*((int16_t *) (x+SBTREE_MIN_OFFSET)) > *((int16_t *) (y))) ? *((int16_t *) (x+SBTREE_MIN_OFFSET)) = *((int16_t *) (y)):*((int16_t *) (x+SBTREE_MIN_OFFSET))
-#define SBTREE_GET_BITMAP(x,y)  	*((uint8_t *)  (y+x->bmOffset))
-*/
+#define SBTREE_IS_INTERIOR(x)  	(*((count_t *) (x+SBTREE_COUNT_OFFSET)) >= 10000 ? 1 : 0)
+#define SBTREE_IS_ROOT(x)  		(*((count_t *) (x+SBTREE_COUNT_OFFSET)) >= 20000 ? 1 : 0)
+#define SBTREE_SET_INTERIOR(x) 	SBTREE_SET_COUNT(x,*((count_t *) (x+SBTREE_COUNT_OFFSET))+10000)
+#define SBTREE_SET_ROOT(x) 		SBTREE_SET_COUNT(x,*((count_t *) (x+SBTREE_COUNT_OFFSET))+20000)
 
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
 #define BYTE_TO_BINARY(byte)  \
@@ -99,8 +91,8 @@ typedef struct {
 	uint8_t recordSize;							/* Size of record in bytes (fixed-size records) */
 	uint8_t headerSize;							/* Size of header in bytes (calculated during init()) */
 	id_t nextPageId;							/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
-	uint16_t maxRecordsPerPage;					/* Maximum records per page */
-	uint16_t maxInteriorRecordsPerPage;			/* Maximum interior records per page */
+	count_t maxRecordsPerPage;					/* Maximum records per page */
+	count_t maxInteriorRecordsPerPage;			/* Maximum interior records per page */
 	uint8_t bmOffset;							/* Offset of bitmap in header from start of block */
     int8_t (*compareKey)(void *a, void *b);		/* Function that compares two arbitrary keys passed as parameters */
 	void (*extractData)(void *data);			/* Given a record, function that extracts the data (key) value from that record */
@@ -114,13 +106,8 @@ typedef struct {
 } sbtreeState;
 
 typedef struct {
-    int32_t key;
-    char	value[12];
-} test_record_t;
-
-typedef struct {
-    int32_t lastIterPage;						/* Last page read by iterator */
-	int16_t lastIterRec;						/* Last record read by iterator */
+	id_t activeIteratorPath[5];					/* Active path of iterator from root (in position 0) to current leaf node */    
+	count_t lastIterRec[5];						/* Last record processed by iterator at each level */
 	void*	minKey;
 	void*	maxKey;
     void*	minTime;
@@ -165,6 +152,8 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data);
 @brief     	Initialize iterator on SBTREE structure.
 @param     	state
                 SBTree algorithm state structure
+@param     	it
+                SBTree iterator state structure
 */
 void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it);
 
@@ -172,21 +161,14 @@ void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it);
 @brief     	Initialize iterator on SBTREE structure.
 @param     	state
                 SBTree algorithm state structure
+@param     	it
+                SBTree iterator state structure
+@param     	key
+                Key for record
 @param     	data
                 Data for record
 */
-int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **data);
-
-/**
-@brief     	Inserts a given record into structure.
-@param     	state
-                SBTree algorithm state structure
-@param     	timestamp
-                Integer timestamp (increasing)
-@param     	data
-                Data for record
-*/
-void sbtreeRangeQuery(sbtreeState *state, void *minRange, void *maxRange);
+int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **data);
 
 /**
 @brief     	Flushes output buffer.

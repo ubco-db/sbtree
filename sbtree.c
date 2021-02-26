@@ -45,7 +45,6 @@
 /*
 Comparison functions. Code is adapted from ldbm.
 */
-
 /**
 @brief     	Compares two unsigned int32_t values.
 @param     	a
@@ -60,7 +59,6 @@ static int8_t uint32Compare(void *a, void *b)
 	if(result > 0) return 1;
     return 0;	
 }
-
 
 /**
 @brief     	Compares two values by bytes. 
@@ -449,9 +447,9 @@ int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 
 /**
 @brief     	Given a key, searches the node for the key.
-			If interior node, returns pointer to next page id to follow.
-			If leaf node, returns pointer to first record with that key.
-			Returns NULL if key is not found.			
+			If interior node, returns child record number containing next page id to follow.
+			If leaf node, returns if of first record with that key or (<= key).
+			Returns -1 if key is not found.			
 @param     	state
                 SBTree algorithm state structure
 @param     	buffer
@@ -460,10 +458,10 @@ int8_t sbtreePut(sbtreeState *state, void* key, void *data)
                 Key for record
 @param		pageId
 				Page if for page being searched
-@param		level
-				Level of node in tree
+@param		range
+				1 if range query so return pointer to first record <= key, 0 if exact query so much return first exact match record
 */
-void* sbtreeSearchNode(sbtreeState *state, void *buffer, void* key, id_t pageId, int8_t level)
+id_t sbtreeSearchNode(sbtreeState *state, void *buffer, void* key, id_t pageId, int8_t range)
 {
 	int16_t first, last, middle, count;
 	int8_t compare, interior;
@@ -475,17 +473,14 @@ void* sbtreeSearchNode(sbtreeState *state, void *buffer, void* key, id_t pageId,
 	if (interior)
 	{
 		if (count == 0)	/* Only one child pointer */
-			return buffer + state->headerSize + state->keySize*count;
+			return 0;
 		if (count == 1)	/* One key and two children pointers */
 		{
 			mkey = buffer+state->headerSize;   /* Key at index 0 */
 			compare = state->compareKey(key, mkey);
 			if (compare < 0)
-				return buffer + state->headerSize + state->keySize*state->maxInteriorRecordsPerPage; /* Child pointer 0 */
-			
-			if (pageId == state->activePath[level])
-				return &(state->activePath[level+1]);		/* Search node was on active path and accessing last child pointer. Use current mapping */
-			return buffer + state->headerSize + state->keySize*state->maxInteriorRecordsPerPage + sizeof(id_t); /* Child pointer 1 */
+				return 0;
+			return 1;		
 		}
 		
 		first = 0;	
@@ -508,10 +503,7 @@ void* sbtreeSearchNode(sbtreeState *state, void *buffer, void* key, id_t pageId,
 
 			middle = (first + last)/2;
 		}
-		/* Return pointer */
-		if (last == count && level < state->levels-1 && pageId == state->activePath[level])
-			return &(state->activePath[level+1]);		/* Search node was on active path and accessing last child pointer. Use current mapping */
-		return buffer + state->headerSize + state->keySize*state->maxInteriorRecordsPerPage + sizeof(id_t)*last;
+		return last;		
 	}
 	else
 	{
@@ -526,16 +518,47 @@ void* sbtreeSearchNode(sbtreeState *state, void *buffer, void* key, id_t pageId,
 			if (compare < 0)
 				first = middle + 1;
 			else if (compare == 0) 
-				return mkey;
+				return middle;							
 			else
 				last = middle - 1;
 
 			middle = (first + last)/2;
 		}
-		return NULL;
+		if (range)
+			return middle;
+		return -1;
 	}
 }
 
+/**
+@brief     	Given a child link, returns the proper physical page id.
+			This method handles the mapping of the active path where the pointer in the
+			node is not actually pointing to the most up to date block.			
+@param     	state
+                SBTree algorithm state structure
+@param		buf
+				Buffer containing node
+@param     	pageId
+                Page id for node
+@param     	level
+                Level of node in tree
+@param		childNum
+				Child pointer index
+@return		Return pageId if success or -1 if not valid.
+*/
+id_t getChildPageId(sbtreeState *state, void *buf, id_t pageId, int8_t level, id_t childNum)
+{
+	if (childNum == (SBTREE_GET_COUNT(buf)) && level < state->levels-1 && pageId == state->activePath[level])
+	{	/* Search node was on active path and accessing last child pointer. Use current mapping */
+		return state->activePath[level+1];	
+	}
+	
+	/* Retrieve page number for child */
+	id_t nextId = *((id_t*) (buf + state->headerSize + state->keySize*state->maxInteriorRecordsPerPage + sizeof(id_t)*childNum));
+	if (nextId == 0 && childNum==(SBTREE_GET_COUNT(buf)))	/* Last child which is empty */
+		return -1;
+	return nextId;
+}
 
 /**
 @brief     	Given a key, returns data associated with key.
@@ -554,31 +577,26 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 	/* Starting at root search for key */
 	int8_t l;
 	void* next, *buf;
-	id_t* nextId = (id_t*) &(state->activePath[0]);
+	id_t childNum, nextId = state->activePath[0];
 
 	for (l=0; l < state->levels; l++)
 	{		
-		//printf("Read page: %d\n",*((int32_t*) nextId) );
-		readPage(state, *((int32_t*) nextId));
+		readPage(state, nextId);
 		buf = state->buffer + state->pageSize;
 
 		/* Find the key within the node. Sorted by key. Use binary search. */
-		next = sbtreeSearchNode(state, buf, key, *((int32_t*) nextId), l);
-
-		if (next != NULL)
-		{			
-			nextId = (id_t*) next;			
-		//	printf("Next page: %d\n", *nextId);
-		}
+		childNum = sbtreeSearchNode(state, buf, key, nextId, 0);
+		nextId = getChildPageId(state, buf, nextId, l, childNum);
+		if (nextId == -1)
+			return -1;		
 	}
 
 	/* Search the leaf node and return search result */
-//	printf("Read page: %d\n",*((int32_t*) nextId) );
-	readPage(state, *((int32_t*) nextId));
-	next = sbtreeSearchNode(state, buf, key, *((int32_t*) nextId), l);
-	if (next != NULL)
+	readPage(state, nextId);
+	nextId = sbtreeSearchNode(state, buf, key, nextId, 0);
+	if (nextId != -1)
 	{	/* Key found */
-		memcpy(data, (void*) (next+state->keySize), state->dataSize);
+		memcpy(data, (void*) (buf+state->headerSize+state->recordSize*nextId+state->keySize), state->dataSize);
 		return 0;
 	}
 	return -1;
@@ -693,7 +711,9 @@ int8_t sbtreeFlush(sbtreeState *state)
 /**
 @brief     	Initialize iterator on SBTREE structure.
 @param     	state
-                SBTREE algorithm state structure
+                SBTree algorithm state structure
+@param     	it
+                SBTree iterator state structure
 */
 void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
 {
@@ -709,35 +729,89 @@ void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
 		it->queryBitmap = bm;
 	}
 
-	/* Read first page into memory */
-	it->lastIterPage = -1;
-	it->lastIterRec = 10000;	/* Force to read next page */	
+	/* Find start location */
+	/* Starting at root search for key */
+	int8_t l;
+	void* next, *buf;	
+	id_t childNum, nextId = state->activePath[0];
+
+	for (l=0; l < state->levels; l++)
+	{		
+		it->activeIteratorPath[l] = nextId;		
+		readPage(state, nextId);
+		buf = state->buffer + state->pageSize;
+
+		/* Find the key within the node. Sorted by key. Use binary search. */
+		childNum = sbtreeSearchNode(state, buf, it->minKey, nextId, 1);
+		nextId = getChildPageId(state, buf, nextId, l, childNum);
+		if (nextId == -1)
+			return;	
+		
+		it->lastIterRec[l] = childNum;
+	}
+
+	/* Search the leaf node and return search result */
+	it->activeIteratorPath[l] = nextId;	
+	readPage(state, nextId);
+	childNum = sbtreeSearchNode(state, buf, it->minKey, nextId, 1);		
+	it->lastIterRec[l] = childNum;
 }
 
 
 /**
-@brief     	Return next record in SBTREE structure.
+@brief     	Initialize iterator on SBTREE structure.
 @param     	state
-                SBTREE algorithm state structure
+                SBTree algorithm state structure
+@param     	it
+                SBTree iterator state structure
+@param     	key
+                Key for record
 @param     	data
                 Data for record
 */
-int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **data)
+int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **data)
 {	
 	void *buf = state->buffer+state->pageSize;
+	int8_t l=state->levels;
+	id_t nextPage;
+
 	/* Iterate until find a record that matches search criteria */
 	while (1)
 	{	
-		if (it->lastIterRec >= SBTREE_GET_COUNT(buf))
-		{	/* Read next page */			
-			it->lastIterRec = 0;
+		if (it->lastIterRec[l] >= SBTREE_GET_COUNT(buf))
+		{	/* Read next page */						
+			it->lastIterRec[l] = 0;
 
 			while (1)
 			{
-				it->lastIterPage++;
-				if (readPage(state, it->lastIterPage) != 0)
-					return 0;		
+				/* Advance to next page. Requires examining active path. */
+				for (l=state->levels-1; l >= 0; l--)
+				{				
+					if (readPage(state, it->activeIteratorPath[l]) != 0)
+						return 0;	
 
+					int8_t count = SBTREE_GET_COUNT(buf);
+					if (l == state->levels-1)
+						count--;
+					if (it->lastIterRec[l] < count)
+					{
+						it->lastIterRec[l]++;
+						break;
+					}
+					it->lastIterRec[l] = 0;
+				}
+
+				for ( ; l < state->levels; l++)
+				{						
+					nextPage = it->activeIteratorPath[l];
+					nextPage = getChildPageId(state, buf, nextPage, l, it->lastIterRec[l]);
+					if (nextPage == -1)
+						return 0;	
+					
+					it->activeIteratorPath[l+1] = nextPage;
+					if (readPage(state, nextPage) != 0)
+						return 0;	
+				}
 
 				/* TODO: Check timestamps, min/max, and bitmap to see if query range overlaps with range of records	stored in block */
 				/* If not read next block */
@@ -760,29 +834,15 @@ int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **data)
 		}
 		
 		/* Get record */	
-		*data = buf+state->headerSize+it->lastIterRec*state->recordSize;
-		it->lastIterRec++;
+		*key = buf+state->headerSize+it->lastIterRec[l]*state->recordSize;
+		*data = *key+state->keySize;
+		it->lastIterRec[l]++;
 		
-		//printf("Key: %d\n", **((int32_t**) data));
-		/* TODO: Check that record meets filter constraints */
-		if (it->minKey != NULL && state->compareKey(*data, it->minKey) < 0)
+		/* Check that record meets filter constraints */
+		if (it->minKey != NULL && state->compareKey(*key, it->minKey) < 0)
 			continue;
-		if (it->maxKey != NULL && state->compareKey(*data, it->maxKey) > 0)
-			continue;
+		if (it->maxKey != NULL && state->compareKey(*key, it->maxKey) > 0)
+			return 0;	/* Passed maximum range */
 		return 1;
 	}
-}
-
-/**
-@brief     	Inserts a given record into structure.
-@param     	state
-                SBTREE algorithm state structure
-@param     	timestamp
-                Integer timestamp (increasing)
-@param     	data
-                Data for record
-*/
-void sbtreeRangeQuery(sbtreeState *state, void *minRange, void *maxRange)
-{
-
 }
