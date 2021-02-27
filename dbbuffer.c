@@ -54,7 +54,10 @@ void dbbufferInit(dbbuffer *state)
 	
 	state->numReads = 0;
 	state->numWrites = 0;
-	state->bufferHits = 0;	
+	state->bufferHits = 0;
+
+	for (count_t l=0; l < state->numPages; l++)
+		state->status[l] = 0;	
 }
 
 /**
@@ -68,9 +71,18 @@ void dbbufferInit(dbbuffer *state)
 void* readPage(dbbuffer *state, id_t pageNum)
 {    
 //	printf("RP: %d\n", pageNum);
-    FILE* fp = state->file;
-    void *buf = state->buffer + state->pageSize;
+  	
+	  void *buf = state->buffer + state->pageSize;
 
+	/* Check to see if page is currently in buffer */
+	// printf("Buffer: %d  Request: %d\n", state->status[1], pageNum);
+	if (state->status[1] == pageNum && pageNum != 0)
+	{
+		state->bufferHits++;
+		return buf;
+	}
+    FILE* fp = state->file;
+  
     /* Seek to page location in file */
     fseek(fp, pageNum*state->pageSize, SEEK_SET);
 
@@ -79,6 +91,8 @@ void* readPage(dbbuffer *state, id_t pageNum)
     {	return NULL;       
     }
     state->numReads++;
+	state->status[1] = pageNum;
+
     #ifdef DEBUG_READ
         printf("Read block: %d Count: %d\r\n",pageNum, SBTREE_GET_COUNT(buf));   
 		printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (buf+state->bmOffset))));  		
