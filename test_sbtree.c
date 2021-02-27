@@ -151,11 +151,11 @@ void runalltests_sbtree()
     int32_t numRecords = 300;
    
     /* Configure buffer */
-    dbbuffer buffer;
-    buffer.pageSize = 512;
-    buffer.numPages = M;
-    buffer.status = malloc(sizeof(id_t)*M);
-    buffer.buffer  = malloc((size_t) buffer.numPages * buffer.pageSize);   
+    dbbuffer* buffer = malloc(sizeof(dbbuffer));
+    buffer->pageSize = 512;
+    buffer->numPages = M;
+    buffer->status = malloc(sizeof(id_t)*M);
+    buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
 
     /* Configure SBTree state */
     sbtreeState* state = malloc(sizeof(sbtreeState));
@@ -177,7 +177,7 @@ void runalltests_sbtree()
         return;
     }
     state->file = fp;
-    buffer.file = fp;
+    buffer->file = fp;
 
    // state->parameters = SBTREE_USE_INDEX | SBTREE_USE_BMAP;
      state->parameters = 0;
@@ -187,7 +187,7 @@ void runalltests_sbtree()
     state->updateBitmap = updateBitmapInt8Bucket;
     state->compareKey = int32Comparator;
     state->buildBitmap = buildBitmapInt8BucketWithRange;
-    state->buffer = &buffer;
+    state->buffer = buffer;
 
     /* Initialize SBTree structure with parameters */
     sbtreeInit(state);
@@ -297,7 +297,7 @@ void runalltests_sbtree()
     
 
     /* Perform various queries to test performance */
-    // closeBuffer(&buffer);
+    closeBuffer(buffer);
     fclose(state->file);
     
     free(state->buffer->buffer);

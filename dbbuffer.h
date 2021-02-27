@@ -52,11 +52,10 @@ typedef struct {
 	count_t	numPages;				/* Number of buffer pages */    
 	FILE *file;						/* File for storing data records. TODO: Will be replaced with RAW memory access routines. */
 	id_t nextPageId;				/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
-	id_t nextPageWriteId;			/* Physical page id of next page to write. */
-	
-	//id_t numWrites;					/* Number of page writes */
-	//id_t numReads;					/* Number of page reads */
-	//id_t bufferHits;				/* Number of pages returned from buffer rather than storage */
+	id_t nextPageWriteId;			/* Physical page id of next page to write. */	
+	id_t numWrites;					/* Number of page writes */
+	id_t numReads;					/* Number of page reads */
+	id_t bufferHits;				/* Number of pages returned from buffer rather than storage */
 } dbbuffer;
 
 /**

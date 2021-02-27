@@ -51,11 +51,10 @@ void dbbufferInit(dbbuffer *state)
 	/* TODO: These values would be set during recovery if database already exists. */
 	state->nextPageId = 0;
 	state->nextPageWriteId = 0;
-	/*
+	
 	state->numReads = 0;
 	state->numWrites = 0;
-	state->bufferHits = 0;
-	*/
+	state->bufferHits = 0;	
 }
 
 /**
@@ -79,7 +78,7 @@ void* readPage(dbbuffer *state, id_t pageNum)
     if (0 ==  fread(buf, state->pageSize, 1, fp))
     {	return NULL;       
     }
- //   state->numReads++;
+    state->numReads++;
     #ifdef DEBUG_READ
         printf("Read block: %d Count: %d\r\n",pageNum, SBTREE_GET_COUNT(buf));   
 		printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (buf+state->bmOffset))));  		
@@ -142,7 +141,7 @@ int32_t writePage(dbbuffer *state, void* buffer)
                 printf("%d: Output Record: %d\n", k, buf->key);
             }
 	#endif
-//	state->numWrites++;
+	state->numWrites++;
 	return pageNum;
 }
 
@@ -174,7 +173,7 @@ void* initBufferPage(dbbuffer *state, int pageNum)
 */
 void closeBuffer(dbbuffer *state)
 {
-//	printf("Num reads: %d\n", state->numReads);
-	//printf("Buffer hits: %d\n", state->bufferHits);
-	// printf("Num writes: %d\n", state->numWrites);
+	printf("Num reads: %d\n", state->numReads);
+	printf("Buffer hits: %d\n", state->bufferHits);
+	 printf("Num writes: %d\n", state->numWrites);
 }
