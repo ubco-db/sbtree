@@ -72,24 +72,6 @@ static int8_t byteCompare(void *a, void *b, int16_t size)
 	return memcmp(a, b, size);	
 }
 
-/**
-@brief     	Initialize in-memory buffer page.
-@param     	state
-                SBTree algorithm state structure
-@param     	pageNum
-                In memory buffer page id (number)
-*/
-void initBufferPage(sbtreeState *state, int pageNum)
-{	
-	/* Insure all values are 0 in page. */
-	/* TODO: May want to initialize to all 1s for certian memory types. */	
-	void *buf = state->buffer + pageNum * state->pageSize;
-	for (uint16_t i = 0; i < state->pageSize/sizeof(int32_t); i++)
-    {
-        ((int32_t*) buf)[i] = 0;
-    }		
-}
-
 
 /**
 @brief     	Initialize an SBTree structure.
@@ -106,8 +88,9 @@ void sbtreeInit(sbtreeState *state)
 								SBTREE_USING_BMAP(state->parameters));
 
 	/* TODO: These values would be set during recovery if database already exists. */
-	state->nextPageId = 0;
-	state->nextPageWriteId = 0;
+	// state->nextPageId = 0;
+	// state->nextPageWriteId = 0;
+	dbbufferInit(state->buffer);
 
 	state->compareKey = uint32Compare;
 
@@ -128,12 +111,12 @@ void sbtreeInit(sbtreeState *state)
 	state->levels = 1;
 
 	/* Create and write empty root node */
-	initBufferPage(state, 0);
-	SBTREE_SET_ROOT(state->buffer);		
-	state->activePath[0] = writePage(state, state->buffer);		/* Store root location */	
+	state->writeBuffer = initBufferPage(state->buffer, 0);
+	SBTREE_SET_ROOT(state->writeBuffer);		
+	state->activePath[0] = writePage(state->buffer, state->writeBuffer);		/* Store root location */	
 
 	/* Allocate first page of buffer as output page for data records */	
-	initBufferPage(state, 0);
+	initBufferPage(state->buffer, 0);
 }
 
 
@@ -220,9 +203,8 @@ void sbtreePrintNodeBuffer(sbtreeState *state, int pageNum, int depth, void *buf
 */
 void sbtreePrintNode(sbtreeState *state, int pageNum, int depth)
 {
-	readPage(state, pageNum);
-
-	void *buf = state->buffer+state->pageSize;
+	void* buf = readPage(state->buffer, pageNum);
+	
 	int16_t c, count =  SBTREE_GET_COUNT(buf); 	
 
 	sbtreePrintNodeBuffer(state, pageNum, depth, buf);
@@ -234,7 +216,7 @@ void sbtreePrintNode(sbtreeState *state, int pageNum, int depth)
 			int32_t val = *((int32_t*) (buf+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + c*sizeof(id_t)));
 			
 			sbtreePrintNode(state, val, depth+1);	
-			readPage(state, pageNum);			
+			buf = readPage(state->buffer, pageNum);			
 		}	
 		/* Print last child node if active */
 		int32_t val = *((int32_t*) (buf+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + c*sizeof(id_t)));
@@ -285,11 +267,11 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 
 	for (l=state->levels-1; l >= 0; l--)
 	{
-		if (readPage(state, state->activePath[l]) != 0)
+		buf = readPageBuffer(state->buffer, state->activePath[l], 0);
+		if (buf == NULL)
 			return;		/* TODO: Should handle error condition on failed read. */
 		
-		/* Determine if there is space in the page */
-		buf = state->buffer+state->pageSize;
+		/* Determine if there is space in the page */		
 		count =  SBTREE_GET_COUNT(buf); 
 				
 		if ( (count > state->maxInteriorRecordsPerPage) || (state->levels > 1 && l == 0 && count >= state->maxInteriorRecordsPerPage))
@@ -299,12 +281,12 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 			if (l < state->levels - 1)
 			{								
 				memcpy(buf + state->keySize * state->maxInteriorRecordsPerPage + sizeof(id_t) * (count) + state->headerSize, &prevPageNum, sizeof(id_t));											
-				state->activePath[l]  = writePage(state, buf);
+				state->activePath[l]  = writePage(state->buffer, buf);
 			}
 		
-			initBufferPage(state, 0);
-			SBTREE_SET_INTERIOR(state->buffer);
-			buf = state->buffer;
+			initBufferPage(state->buffer, 0);
+			SBTREE_SET_INTERIOR(state->writeBuffer);
+			buf = state->writeBuffer;
 
 			/* Store pointer to new leaf node */
 			/* For first interior node level above leaf the separator is the currently inserted key. For other levels no key inserted just pointer. */
@@ -318,7 +300,7 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 
 			/* Write page. Update active page mapping. */
 			prevPageNum = state->activePath[l];
-			state->activePath[l] = writePage(state, state->buffer);												
+			state->activePath[l] = writePage(state->buffer, buf);												
 			pageNum = state->activePath[l];						
 		}
 		else 
@@ -360,7 +342,7 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 
 			/* Write updated interior page */								
 			/* Update location of page */
-			state->activePath[l] = writePage(state, buf);				
+			state->activePath[l] = writePage(state->buffer, buf);				
 			break;
 		}		
 	}		 
@@ -369,22 +351,22 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 	/* Grow one level, shift everything down, and create new root */
 	if (l == -1)
 	{			
-		initBufferPage(state, 0);
+		initBufferPage(state->buffer, 0);
 
 		/* Copy record onto page (minkey, prevPageNum) */
-		memcpy(state->buffer + state->headerSize, minkey, state->keySize);		
-		memcpy(state->buffer + state->headerSize + state->keySize * state->maxInteriorRecordsPerPage, &prevPageNum, sizeof(id_t));
+		memcpy(state->writeBuffer + state->headerSize, minkey, state->keySize);		
+		memcpy(state->writeBuffer + state->headerSize + state->keySize * state->maxInteriorRecordsPerPage, &prevPageNum, sizeof(id_t));
 		
 		/* Copy greater than record on to page. Note: Basically child pointer and infinity for key */		
-		memcpy(state->buffer + state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + sizeof(id_t), &state->activePath[0], sizeof(id_t));		
+		memcpy(state->writeBuffer + state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + sizeof(id_t), &state->activePath[0], sizeof(id_t));		
 
 		/* Update count */
-		SBTREE_INC_COUNT(state->buffer);	
-		SBTREE_SET_ROOT(state->buffer);
+		SBTREE_INC_COUNT(state->writeBuffer);	
+		SBTREE_SET_ROOT(state->writeBuffer);
 		
 		for (l=state->levels; l > 0; l--)
 			state->activePath[l] = state->activePath[l-1]; 
-		state->activePath[0] = writePage(state, state->buffer);	/* Store root location */			
+		state->activePath[0] = writePage(state->buffer, state->writeBuffer);	/* Store root location */			
 		state->levels++;
 	}
 }
@@ -401,30 +383,30 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 */
 int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 {		
-	int16_t count =  SBTREE_GET_COUNT(state->buffer); 
+	int16_t count =  SBTREE_GET_COUNT(state->writeBuffer); 
 
 	/* Write current page if full */
 	if (count >= state->maxRecordsPerPage)
 	{	
 		/* Write page first so can use buffer for updating tree structure */
-		int32_t pageNum = writePage(state, state->buffer);				
+		int32_t pageNum = writePage(state->buffer, state->writeBuffer);				
 
 		/* Add pointer to page to B-tree structure */
 		/* Second pointer parameter is minimum key in currently full leaf node of data */
 		/* Need to copy key from current write buffer as will reuse buffer */
-		memcpy(state->tempKey, (void*) (state->buffer+state->headerSize), state->keySize); 
+		memcpy(state->tempKey, (void*) (state->writeBuffer+state->headerSize), state->keySize); 
 		sbtreeUpdateIndex(state, state->tempKey, key, pageNum);
 
 		count = 0;			
-		initBufferPage(state, 0);					
+		initBufferPage(state->buffer, 0);					
 	}
 
 	/* Copy record onto page */
-	memcpy(state->buffer + state->recordSize * count + state->headerSize, key, state->keySize);
-	memcpy(state->buffer + state->recordSize * count + state->headerSize + state->keySize, data, state->dataSize);
+	memcpy(state->writeBuffer + state->recordSize * count + state->headerSize, key, state->keySize);
+	memcpy(state->writeBuffer + state->recordSize * count + state->headerSize + state->keySize, data, state->dataSize);
 
 	/* Update count */
-	SBTREE_INC_COUNT(state->buffer);	
+	SBTREE_INC_COUNT(state->writeBuffer);	
 
 	/* Update Max */
 //	SBTREE_UPDATE_MAX(state->buffer, key);
@@ -581,8 +563,7 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 
 	for (l=0; l < state->levels; l++)
 	{		
-		readPage(state, nextId);
-		buf = state->buffer + state->pageSize;
+		buf = readPage(state->buffer, nextId);		
 
 		/* Find the key within the node. Sorted by key. Use binary search. */
 		childNum = sbtreeSearchNode(state, buf, key, nextId, 0);
@@ -592,7 +573,7 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 	}
 
 	/* Search the leaf node and return search result */
-	readPage(state, nextId);
+	buf = readPage(state->buffer, nextId);
 	nextId = sbtreeSearchNode(state, buf, key, nextId, 0);
 	if (nextId != -1)
 	{	/* Key found */
@@ -613,7 +594,7 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 @return     
             Physical page number of location where page is written
 */
-int32_t writePage(sbtreeState *state, void *buffer)
+int32_t writePageOld(sbtreeState *state, void *buffer)
 {    
 	/* Always writes to next page number. Returned to user. */	
 	int32_t pageNum = state->nextPageWriteId++;
@@ -649,7 +630,7 @@ int32_t writePage(sbtreeState *state, void *buffer)
 @return     
             Buffer pointer or NULL if failutre
 */
-int8_t readPage(sbtreeState *state, int pageNum)
+int8_t readPageOld(sbtreeState *state, int pageNum)
 {    
 	// printf("RP: %d\n", pageNum);
     FILE* fp = state->file;
@@ -683,7 +664,7 @@ int8_t readPage(sbtreeState *state, int pageNum)
 */
 int8_t sbtreeFlush(sbtreeState *state)
 {
-	int32_t pageNum = writePage(state, state->buffer);	
+	int32_t pageNum = writePage(state->buffer, state->writeBuffer);	
 
 	/* Add pointer to page to B-tree structure */		
 	/* So do not have to allocate memory. Use the next key value in the buffer temporarily to store a MAX_KEY of all 1 bits */	
@@ -697,13 +678,13 @@ int8_t sbtreeFlush(sbtreeState *state)
 // TODO: Look at what the key should be when flush. Needs to be one bigger than data set 
 
 	// sbtreePrint(state);
-	void *maxkey = state->buffer + state->recordSize * (SBTREE_GET_COUNT(state->buffer)-1) + state->headerSize;
+	void *maxkey = state->writeBuffer + state->recordSize * (SBTREE_GET_COUNT(state->writeBuffer)-1) + state->headerSize;
 	int32_t mkey = *((int32_t*) maxkey)+1;
 	sbtreeUpdateIndex(state, &mkey, &mkey, pageNum);
 	
 
 	/* Reinitialize buffer */
-	initBufferPage(state, 0);
+	initBufferPage(state->buffer, 0);
 	return 0;
 }
 
@@ -734,12 +715,12 @@ void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
 	int8_t l;
 	void* next, *buf;	
 	id_t childNum, nextId = state->activePath[0];
+	it->currentBuffer = NULL;
 
 	for (l=0; l < state->levels; l++)
 	{		
 		it->activeIteratorPath[l] = nextId;		
-		readPage(state, nextId);
-		buf = state->buffer + state->pageSize;
+		buf = readPage(state->buffer, nextId);		
 
 		/* Find the key within the node. Sorted by key. Use binary search. */
 		childNum = sbtreeSearchNode(state, buf, it->minKey, nextId, 1);
@@ -752,7 +733,8 @@ void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
 
 	/* Search the leaf node and return search result */
 	it->activeIteratorPath[l] = nextId;	
-	readPage(state, nextId);
+	buf = readPage(state->buffer, nextId);
+	it->currentBuffer = buf;
 	childNum = sbtreeSearchNode(state, buf, it->minKey, nextId, 1);		
 	it->lastIterRec[l] = childNum;
 }
@@ -771,9 +753,13 @@ void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
 */
 int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **data)
 {	
-	void *buf = state->buffer+state->pageSize;
+	void *buf = it->currentBuffer;
 	int8_t l=state->levels;
 	id_t nextPage;
+
+	/* No current page to search */
+	if (buf == NULL)
+		return 0;
 
 	/* Iterate until find a record that matches search criteria */
 	while (1)
@@ -786,9 +772,10 @@ int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **dat
 			{
 				/* Advance to next page. Requires examining active path. */
 				for (l=state->levels-1; l >= 0; l--)
-				{				
-					if (readPage(state, it->activeIteratorPath[l]) != 0)
-						return 0;	
+				{	
+					buf = readPage(state->buffer, it->activeIteratorPath[l]);
+					if (buf == NULL)
+						return 0;						
 
 					int8_t count = SBTREE_GET_COUNT(buf);
 					if (l == state->levels-1)
@@ -809,9 +796,11 @@ int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **dat
 						return 0;	
 					
 					it->activeIteratorPath[l+1] = nextPage;
-					if (readPage(state, nextPage) != 0)
+					buf = readPage(state->buffer, nextPage);
+					if (buf == NULL)
 						return 0;	
 				}
+				it->currentBuffer = buf;
 
 				/* TODO: Check timestamps, min/max, and bitmap to see if query range overlaps with range of records	stored in block */
 				/* If not read next block */

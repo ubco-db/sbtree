@@ -149,6 +149,13 @@ void runalltests_sbtree()
 {
     int8_t M = 2;    
     int32_t numRecords = 300;
+   
+    /* Configure buffer */
+    dbbuffer buffer;
+    buffer.pageSize = 512;
+    buffer.numPages = M;
+    buffer.status = malloc(sizeof(id_t)*M);
+    buffer.buffer  = malloc((size_t) buffer.numPages * buffer.pageSize);   
 
     /* Configure SBTree state */
     sbtreeState* state = malloc(sizeof(sbtreeState));
@@ -158,7 +165,7 @@ void runalltests_sbtree()
     state->dataSize = 12;
     state->pageSize = 512;
     state->bufferSizeInBlocks = M;
-    state->buffer  = malloc((size_t) state->bufferSizeInBlocks * state->pageSize);   
+    // state->buffer  = malloc((size_t) state->bufferSizeInBlocks * state->pageSize);   
     state->tempKey = malloc(sizeof(int32_t)); 
     int8_t* recordBuffer = malloc(state->recordSize);
 
@@ -170,6 +177,8 @@ void runalltests_sbtree()
         return;
     }
     state->file = fp;
+    buffer.file = fp;
+
    // state->parameters = SBTREE_USE_INDEX | SBTREE_USE_BMAP;
      state->parameters = 0;
 
@@ -178,6 +187,7 @@ void runalltests_sbtree()
     state->updateBitmap = updateBitmapInt8Bucket;
     state->compareKey = int32Comparator;
     state->buildBitmap = buildBitmapInt8BucketWithRange;
+    state->buffer = &buffer;
 
     /* Initialize SBTree structure with parameters */
     sbtreeInit(state);
@@ -207,15 +217,15 @@ void runalltests_sbtree()
         *((int32_t*) (recordBuffer+4)) = i;
      
         sbtreePut(state, recordBuffer, (void*) (recordBuffer + 4));    
-        /*
+        
         if (i % 10 == 0)
         {
-            printf("KEY: %d\n",i);
-            sbtreePrint(state);   
+   //         printf("KEY: %d\n",i);
+    //        sbtreePrint(state);   
         }
-        */
+        
     }    
-
+ 
     int16_t minMaxSumError = sumErr + maxErr + minErr;
     printf("Errors: min/max/sum: %d\n", minMaxSumError);    
 
@@ -271,7 +281,7 @@ void runalltests_sbtree()
 
     while (sbtreeNext(state, &it, (void*) &itKey, (void*) &itData))
     {                      
-        printf("Key: %d  Data: %d\n", *itKey, *itData);
+       // printf("Key: %d  Data: %d\n", *itKey, *itData);
         if (i+mv != *itKey)
         {   success = 0;
             printf("Key: %d Error\n", *itKey);
@@ -287,10 +297,10 @@ void runalltests_sbtree()
     
 
     /* Perform various queries to test performance */
-
+    // closeBuffer(&buffer);
     fclose(state->file);
     
-    free(state->buffer);
+    free(state->buffer->buffer);
 }
 
 /**

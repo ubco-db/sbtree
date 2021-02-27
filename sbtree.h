@@ -40,6 +40,8 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "dbbuffer.h"
+
 /* Define type for page ids (physical and logical). */
 typedef uint32_t id_t;
 
@@ -82,7 +84,7 @@ typedef uint16_t count_t;
 
 typedef struct {
 	FILE *file;									/* File for storing data records. TODO: Will be replaced with RAW memory access routines. */
-	void *buffer;								/* Pre-allocated memory buffer for use by algorithm */
+//	void *buffer;								/* Pre-allocated memory buffer for use by algorithm */
 	uint8_t bufferSizeInBlocks;					/* Size of buffer in blocks */
 	uint16_t pageSize;							/* Size of physical page on device */
 	uint8_t parameters;    						/* Parameter flags for indexing and bitmaps */
@@ -103,6 +105,8 @@ typedef struct {
 	id_t activePath[5];							/* Active path of page indexes from root (in position 0) to node just above leaf */
 	id_t nextPageWriteId;						/* Physical page id of next page to write. */
 	void *tempKey;								/* Used to temporarily store a key value. Space must be preallocated. */
+	dbbuffer *buffer;							/* Pre-allocated memory buffer for use by algorithm */
+	void* writeBuffer;							/* Pointer to in-memory write buffer */
 } sbtreeState;
 
 typedef struct {
@@ -113,6 +117,7 @@ typedef struct {
     void*	minTime;
 	void* 	maxTime;
 	void*	queryBitmap;
+	void*   currentBuffer;						/* Curret buffer used by iterator */
 } sbtreeIterator;
 
 /**
@@ -183,24 +188,6 @@ int8_t sbtreeFlush(sbtreeState *state);
                 SBTree algorithm state structure
 */
 void sbtreePrint(sbtreeState *state);
-
-/**
-@brief      Reads page from storage. Returns 0 if success.
-@param     	state
-                SBTree algorithm state structure
-@param     	pageNum
-                Physical page id (number)
-*/
-int8_t readPage(sbtreeState *state, int32_t pageNum);
-
-/**
-@brief      Writes page to storage. Returns physical page id if success. -1 if failure.
-@param     	state
-                SBTree algorithm state structure
-@param     	buffer
-                In memory buffer containing page
-*/
-int32_t writePage(sbtreeState *state, void *buffer);
 
 #if defined(__cplusplus)
 }
