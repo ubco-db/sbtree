@@ -147,8 +147,8 @@ int8_t int32Comparator(
  */ 
 void runalltests_sbtree()
 {
-    int8_t M = 8;    
-    int32_t numRecords = 10000;
+    int8_t M = 4;    
+    int32_t numRecords = 1000000;
    
     /* Configure buffer */
     dbbuffer* buffer = malloc(sizeof(dbbuffer));
@@ -162,7 +162,7 @@ void runalltests_sbtree()
 
     state->recordSize = 16;
     state->keySize = 4;
-    state->dataSize = 12;
+    state->dataSize = 12; 
     state->pageSize = 512;
     state->bufferSizeInBlocks = M;
     buffer->activePath = state->activePath;

@@ -103,11 +103,12 @@ void sbtreeInit(sbtreeState *state)
 
 	/* Calculate number of records per page */
 	state->maxRecordsPerPage = (state->pageSize - state->headerSize) / state->recordSize;
-	state->maxInteriorRecordsPerPage = (state->pageSize - state->headerSize) / (state->keySize+sizeof(id_t));
+	/* Interior records consist of key and id reference. Note: One extra id reference (child pointer). If N keys, have N+1 id references (pointers). */
+	state->maxInteriorRecordsPerPage = (state->pageSize - state->headerSize -sizeof(id_t)) / (state->keySize+sizeof(id_t));
 
 	// Hard-code for testing for now
-	state->maxRecordsPerPage = 10;
-	state->maxInteriorRecordsPerPage = 3;	
+//	state->maxRecordsPerPage = 10;
+//	state->maxInteriorRecordsPerPage = 3;	
 	state->levels = 1;
 
 	/* Create and write empty root node */
