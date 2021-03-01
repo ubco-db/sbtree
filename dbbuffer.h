@@ -50,19 +50,19 @@ typedef struct {
 	void*  	buffer;					/* Allocated memory for buffer */
 	count_t	pageSize;				/* Size of buffer page */
 	count_t	numPages;				/* Number of buffer pages */    
-	FILE *file;						/* File for storing data records. TODO: Will be replaced with RAW memory access routines. */
-	id_t nextPageId;				/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
-	id_t nextPageWriteId;			/* Physical page id of next page to write. */	
-	id_t numWrites;					/* Number of page writes */
-	id_t numReads;					/* Number of page reads */
-	id_t bufferHits;				/* Number of pages returned from buffer rather than storage */
+	FILE 	*file;					/* File for storing data records. TODO: Will be replaced with RAW memory access routines. */
+	id_t 	nextPageId;				/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
+	id_t 	nextPageWriteId;		/* Physical page id of next page to write. */	
+	id_t 	numWrites;				/* Number of page writes */
+	id_t 	numReads;				/* Number of page reads */
+	id_t 	bufferHits;				/* Number of pages returned from buffer rather than storage */
 	count_t lastHit;				/* Buffer id of last buffer page hit */
 	count_t nextBufferPage;			/* Next page buffer id to use. Round robin */
-	id_t* activePath;				/* Active path on insert. Also contains root. Helps to prioritize. */
+	id_t* 	activePath;				/* Active path on insert. Also contains root. Helps to prioritize. */
 } dbbuffer;
 
 /**
-@brief     	Allocates space for buffer given page size and number of pages.
+@brief     	Initializes buffer given page size and number of pages.
 @param     	state
                 DBbuffer state structure
 */
@@ -80,7 +80,7 @@ void dbbufferInit(dbbuffer *state);
 void* readPage(dbbuffer *state, id_t pageNum);
 
 /**
-@brief      Reads page either from buffer or from storage. Returns pointer to buffer if success.
+@brief      Reads page to a particular buffer number. Returns pointer to buffer if success.
 @param     	state
                 DBbuffer state structure
 @param     	pageNum
@@ -94,7 +94,7 @@ void* readPageBuffer(dbbuffer *state, id_t pageNum, count_t bufferNum);
 /**
 @brief      Writes page to storage. Returns physical page id if success. -1 if failure.
 @param     	state
-                SBTree algorithm state structure
+                DBbuffer state structure
 @param     	buffer
                 In memory buffer containing page
 @return		

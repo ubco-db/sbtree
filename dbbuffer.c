@@ -39,7 +39,7 @@
 
 
 /**
-@brief     	Allocates space for buffer given page size and number of pages.
+@brief     	Initializes buffer given page size and number of pages.
 @param     	state
                 DBbuffer state structure
 */
@@ -72,7 +72,6 @@ void dbbufferInit(dbbuffer *state)
 */
 void* readPage(dbbuffer *state, id_t pageNum)
 {    
-//	printf("RP: %d\n", pageNum);  	
 	void *buf;
 	count_t i;
 
@@ -102,7 +101,6 @@ void* readPage(dbbuffer *state, id_t pageNum)
 		else
 		{
 			/* More than minimum pages. Some basic memory management using round robin buffer. */		
-			// printf("Buffer: %d  Request: %d\n", state->status[1], pageNum);
 			buf = NULL;
 			/* Determine buffer location for page */
 			/* TODO: This needs to be improved and may also consider locking pages */
@@ -126,10 +124,8 @@ void* readPage(dbbuffer *state, id_t pageNum)
 						state->nextBufferPage = 2;
 					}
 
-					if (state->status[i] != state->lastHit)
-					{	// buf = state->buffer + state->pageSize*i;
-						break;
-					}
+					if (state->status[i] != state->lastHit)						
+						break;					
 
 					i++;
 				}		
@@ -142,7 +138,7 @@ void* readPage(dbbuffer *state, id_t pageNum)
 }
 
 /**
-@brief      Reads page either from buffer or from storage. Returns pointer to buffer if success.
+@brief      Reads page to a particular buffer number. Returns pointer to buffer if success.
 @param     	state
                 DBbuffer state structure
 @param     	pageNum
@@ -161,34 +157,21 @@ void* readPageBuffer(dbbuffer *state, id_t pageNum, count_t bufferNum)
 
     /* Read page into start of buffer 1 */   
     if (0 ==  fread(buf, state->pageSize, 1, fp))
-    {	return NULL;       
-    }
+    	return NULL;       
+    
     state->numReads++;
-	
-
-    #ifdef DEBUG_READ
-        printf("Read block: %d Count: %d\r\n",pageNum, SBTREE_GET_COUNT(buf));   
-		printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (buf+state->bmOffset))));  		
-        // for (int k = 0; k < SBTREE_GET_COUNT(buf); k++)
-		for (int k = 0; k < 1; k++) // Only print first record
-        {
-            test_record_t *rec = (void *)(buf+state->headerSize+k*state->recordSize);
-            printf("%d: Record: %d\n", k, rec->key);
-        }
-    #endif
+	   
 	return buf;
 }
 
 
 /**
-@brief      Reads page either from buffer or from storage. Returns pointer to buffer if success.
+@brief      Writes page to storage. Returns physical page id if success. -1 if failure.
 @param     	state
-                DBbuffer state structure
-@param		buffer
-				Pointer to in-memory buffer
-@param     	pageNum
-                Physical page id (number)
-@return		Returns 0 if success. -1 if error.
+               	DBbuffer state structure
+@param     	buffer
+                In memory buffer containing page
+@return		
 */
 int32_t writePage(dbbuffer *state, void* buffer)
 {    
@@ -246,6 +229,7 @@ void* initBufferPage(dbbuffer *state, int pageNum)
 void closeBuffer(dbbuffer *state)
 {
 	printStats(state);	
+	fclose(state->file);
 }
 
 /**

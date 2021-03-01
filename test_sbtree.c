@@ -39,115 +39,12 @@
 #include "sbtree.h"
 
 
-#define EXTERNAL_SORT_MAX_RAND 1000000
-
-/* A bitmap with 8 buckets (bits). Range 0 to 100. */
-void updateBitmapInt8Bucket(void *data, void *bm)
-{
-    // Note: Assuming int key is right at the start of the data record
-    int32_t val = *((int16_t*) data);
-    uint8_t* bmval = (int8_t*) bm;
-
-    if (val < 10)
-        *bmval = *bmval | 128;        
-    else if (val < 20)
-        *bmval = *bmval | 64;        
-    else if (val < 30)
-        *bmval = *bmval | 32;        
-    else if (val < 40)
-        *bmval = *bmval | 16;        
-    else if (val < 50)
-        *bmval = *bmval | 8;        
-    else if (val < 60)
-        *bmval = *bmval | 4;            
-    else if (val < 100)
-        *bmval = *bmval | 2;        
-    else 
-        *bmval = *bmval | 1;        
-}	
-
-/* A bitmap with 8 buckets (bits). Range 0 to 100. Build bitmap based on min and max value. */
-void buildBitmapInt8BucketWithRange(void *min, void *max, void *bm)
-{
-    /* Note: Assuming int key is right at the start of the data record */
-    int32_t val = *((int16_t*) min);
-    uint8_t* bmval = (int8_t*) bm;
-
-    if (min == NULL && max == NULL)
-    {
-        *bmval = 255;  /* Everything */
-    }
-    else
-    {
-        int8_t i = 0;
-        uint8_t val = 128;
-        if (min != NULL)
-        {
-            /* Set bits based on min value */
-            updateBitmapInt8Bucket(min, bm);
-
-            /* Assume here that bits are set in increasing order based on smallest value */                        
-            /* Find first set bit */
-            while ( (val & *bmval) == 0 && i < 8)
-            {
-                i++;
-                val = val / 2;
-            }
-            val = val / 2;
-            i++;
-        }
-        if (max != NULL)
-        {
-            /* Set bits based on min value */
-            updateBitmapInt8Bucket(max, bm);
-
-            while ( (val & *bmval) == 0 && i < 8)
-            {
-                i++;
-                *bmval = *bmval + val;
-                val = val / 2;                 
-            }
-        }
-        else
-        {
-            while (i < 8)
-            {
-                i++;
-                *bmval = *bmval + val;
-                val = val / 2;
-            }
-        }        
-    }        
-}	
-
-int8_t inBitmapInt8Bucket(void *data, void *bm)
-{
-    int32_t val = *((int16_t*) data);
-    uint8_t* bmval = (int8_t*) bm;
-
-    uint8_t tmpbm = 0;
-    updateBitmapInt8Bucket(data, &tmpbm);
-
-    // Return a number great than 1 if there is an overlap
-    return tmpbm & *bmval;
-}
-
-int8_t int32Comparator(
-        void			*a,
-        void			*b
-) {
-	int32_t result = *((int32_t*)a) - *((int32_t*)b);
-	if(result < 0) return -1;
-	if(result > 0) return 1;
-    return 0;
-}
-
 /**
  * Runs all tests and collects benchmarks
  */ 
 void runalltests_sbtree()
 {
-    int8_t M = 4;    
+    int8_t M = 2;    
     int32_t numRecords = 1000000;
    
     /* Configure buffer */
@@ -162,12 +59,9 @@ void runalltests_sbtree()
 
     state->recordSize = 16;
     state->keySize = 4;
-    state->dataSize = 12; 
-    state->pageSize = 512;
-    state->bufferSizeInBlocks = M;
+    state->dataSize = 12;       
     buffer->activePath = state->activePath;
 
-    // state->buffer  = malloc((size_t) state->bufferSizeInBlocks * state->pageSize);   
     state->tempKey = malloc(sizeof(int32_t)); 
     int8_t* recordBuffer = malloc(state->recordSize);
 
@@ -178,41 +72,25 @@ void runalltests_sbtree()
         printf("Error: Can't open file!\n");
         return;
     }
-    state->file = fp;
+    
     buffer->file = fp;
 
-   // state->parameters = SBTREE_USE_INDEX | SBTREE_USE_BMAP;
-     state->parameters = 0;
-
-    /* TODO: Setup for data and bitmap comparison functions */
-    state->inBitmap = inBitmapInt8Bucket;
-    state->updateBitmap = updateBitmapInt8Bucket;
-    state->compareKey = int32Comparator;
-    state->buildBitmap = buildBitmapInt8BucketWithRange;
+    state->parameters = 0;    
     state->buffer = buffer;
 
     /* Initialize SBTree structure with parameters */
     sbtreeInit(state);
 
-    /* Insert records into structure */    
-
-    /* Data record is empty. Only need to reset to 0 once as reusing struct. */    
+       /* Data record is empty. Only need to reset to 0 once as reusing struct. */    
     int32_t i;
     for (i = 0; i < state->recordSize-4; i++) // 4 is the size of the key
     {
         recordBuffer[i + sizeof(int32_t)] = 0;
     }
 
-    int32_t sum = 0;
-    int32_t max = INT16_MIN;
-    int32_t min = INT16_MAX;
-
-    int16_t sumErr = 0;
-    int16_t maxErr = 0;
-    int16_t minErr = 0;
-
     clock_t start = clock();
 
+    /* Insert records into structure */    
     for (i = 0; i < numRecords; i++)
     {        
         *((int32_t*) recordBuffer) = i;
@@ -224,16 +102,10 @@ void runalltests_sbtree()
         {
    //         printf("KEY: %d\n",i);
     //        sbtreePrint(state);   
-        }
-        
+        }        
     }    
  
-    int16_t minMaxSumError = sumErr + maxErr + minErr;
-    printf("Errors: min/max/sum: %d\n", minMaxSumError);    
-
-    /* Verify stored all records successfully */
-    sbtreeFlush(state);
-    fflush(state->file);
+    sbtreeFlush(state);    
 
     clock_t end = clock();
     printf("Elapsed Time: %0.6f s\n", ((double) (end - start)) / CLOCKS_PER_SEC);
@@ -250,7 +122,7 @@ void runalltests_sbtree()
         int8_t result = sbtreeGet(state, &key, recordBuffer);
         if (result != 0) 
             printf("ERROR: Failed to find: %d\n", key);
-        if (*((int32_t*) recordBuffer) != key)
+        else if (*((int32_t*) recordBuffer) != key)
         {   printf("ERROR: Wrong data for: %d\n", key);
             printf("Key: %d Data: %d\n", key, *((int32_t*) recordBuffer));
         }
@@ -258,12 +130,14 @@ void runalltests_sbtree()
 
     printStats(buffer);
 
+    /* Below minimum key search */
     int32_t key = -1;
     int8_t result = sbtreeGet(state, &key, recordBuffer);
     if (result == 0) 
         printf("Error1: Key found: %d\n", key);
 
-    key = 350000;
+    /* Above maximum key search */
+    key = 3500000;
     result = sbtreeGet(state, &key, recordBuffer);
     if (result == 0) 
         printf("Error2: Key found: %d\n", key);
@@ -275,9 +149,7 @@ void runalltests_sbtree()
     int mv = 40;     // For all records, select mv = 1.
     it.minKey = &mv;
     int v = 299;
-    it.maxKey = &v;
-    it.minTime = NULL;
-    it.maxTime = NULL;
+    it.maxKey = &v;   
     void *data;
 
     sbtreeInitIterator(state, &it);
@@ -296,7 +168,7 @@ void runalltests_sbtree()
     }
     printf("Read records: %d\n", i);
 
-    if (success && i == (v-mv+1) && !minMaxSumError)
+    if (success && i == (v-mv+1))
         printf("SUCCESS\n");
     else
         printf("FAILURE\n");    
@@ -304,8 +176,7 @@ void runalltests_sbtree()
     printStats(buffer);
 
     /* Perform various queries to test performance */
-    closeBuffer(buffer);
-    fclose(state->file);
+    closeBuffer(buffer);    
     
     free(state->buffer->buffer);
 }

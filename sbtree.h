@@ -82,42 +82,33 @@ typedef uint16_t count_t;
   (byte & 0x02 ? '1' : '0'), \
   (byte & 0x01 ? '1' : '0') 
 
-typedef struct {
-	FILE *file;									/* File for storing data records. TODO: Will be replaced with RAW memory access routines. */
-//	void *buffer;								/* Pre-allocated memory buffer for use by algorithm */
-	uint8_t bufferSizeInBlocks;					/* Size of buffer in blocks */
-	uint16_t pageSize;							/* Size of physical page on device */
+#define MAX_LEVEL 8
+
+typedef struct {			
 	uint8_t parameters;    						/* Parameter flags for indexing and bitmaps */
 	uint8_t keySize;							/* Size of key in bytes (fixed-size records) */
 	uint8_t dataSize;							/* Size of data in bytes (fixed-size records) */
 	uint8_t recordSize;							/* Size of record in bytes (fixed-size records) */
 	uint8_t headerSize;							/* Size of header in bytes (calculated during init()) */
-	id_t nextPageId;							/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
+	id_t 	nextPageId;							/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
 	count_t maxRecordsPerPage;					/* Maximum records per page */
 	count_t maxInteriorRecordsPerPage;			/* Maximum interior records per page */
 	uint8_t bmOffset;							/* Offset of bitmap in header from start of block */
-    int8_t (*compareKey)(void *a, void *b);		/* Function that compares two arbitrary keys passed as parameters */
-	void (*extractData)(void *data);			/* Given a record, function that extracts the data (key) value from that record */
-	void (*updateBitmap)(void *data, void *bm);	/* Given a record, updates bitmap based on its data (key) value */
-	int8_t (*inBitmap)(void *data, void *bm);	/* Returns 1 if data (key) value is a valid value given the bitmap */
-	void (*buildBitmap)(void *min, void *max, void *bm);	/* Builds a query bitmap given [min,max] range of keys */
+    int8_t (*compareKey)(void *a, void *b);		/* Function that compares two arbitrary keys passed as parameters */	
 	uint8_t levels;								/* Number of levels in tree */
-	id_t activePath[8];							/* Active path of page indexes from root (in position 0) to node just above leaf */
-	id_t nextPageWriteId;						/* Physical page id of next page to write. */
-	void *tempKey;								/* Used to temporarily store a key value. Space must be preallocated. */
+	id_t 	activePath[MAX_LEVEL];				/* Active path of page indexes from root (in position 0) to node just above leaf */
+	id_t 	nextPageWriteId;					/* Physical page id of next page to write. */
+	void 	*tempKey;							/* Used to temporarily store a key value. Space must be preallocated. */
 	dbbuffer *buffer;							/* Pre-allocated memory buffer for use by algorithm */
-	void* writeBuffer;							/* Pointer to in-memory write buffer */
+	void	*writeBuffer;						/* Pointer to in-memory write buffer */
 } sbtreeState;
 
 typedef struct {
-	id_t activeIteratorPath[8];					/* Active path of iterator from root (in position 0) to current leaf node */    
-	count_t lastIterRec[8];						/* Last record processed by iterator at each level */
-	void*	minKey;
-	void*	maxKey;
-    void*	minTime;
-	void* 	maxTime;
-	void*	queryBitmap;
-	void*   currentBuffer;						/* Curret buffer used by iterator */
+	id_t 	activeIteratorPath[MAX_LEVEL];		/* Active path of iterator from root (in position 0) to current leaf node */    
+	count_t lastIterRec[MAX_LEVEL];				/* Last record processed by iterator at each level */
+	void*	minKey;								/* Minimum search key (inclusive) */
+	void*	maxKey;    							/* Maximum search key (inclusive) */
+	void*   currentBuffer;						/* Current buffer used by iterator */
 } sbtreeIterator;
 
 /**
@@ -154,7 +145,7 @@ int8_t sbtreePut(sbtreeState *state, void* key, void *data);
 int8_t sbtreeGet(sbtreeState *state, void* key, void *data);
 
 /**
-@brief     	Initialize iterator on SBTREE structure.
+@brief     	Initialize iterator on SBTree structure.
 @param     	state
                 SBTree algorithm state structure
 @param     	it
@@ -163,15 +154,15 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data);
 void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it);
 
 /**
-@brief     	Initialize iterator on SBTREE structure.
+@brief     	Requests next key, data pair from iterator.
 @param     	state
                 SBTree algorithm state structure
 @param     	it
                 SBTree iterator state structure
 @param     	key
-                Key for record
+                Key for record (pointer returned)
 @param     	data
-                Data for record
+                Data for record (pointer returned)
 */
 int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **data);
 

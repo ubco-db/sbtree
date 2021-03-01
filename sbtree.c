@@ -49,7 +49,7 @@ Comparison functions. Code is adapted from ldbm.
 @brief     	Compares two unsigned int32_t values.
 @param     	a
                 value 1
-@param     b
+@param     	b
                 value 2
 */
 static int8_t uint32Compare(void *a, void *b)
@@ -64,7 +64,7 @@ static int8_t uint32Compare(void *a, void *b)
 @brief     	Compares two values by bytes. 
 @param     	a
                 value 1
-@param     b
+@param     	b
                 value 2
 */
 static int8_t byteCompare(void *a, void *b, int16_t size)
@@ -81,15 +81,13 @@ static int8_t byteCompare(void *a, void *b, int16_t size)
 void sbtreeInit(sbtreeState *state)
 {
 	printf("Initializing SBTree.\n");
-	printf("Buffer size: %d  Page size: %d\n", state->bufferSizeInBlocks, state->pageSize);	
+	printf("Buffer size: %d  Page size: %d\n", state->buffer->numPages, state->buffer->pageSize);	
 	state->recordSize = state->keySize + state->dataSize;
 	printf("Record size: %d\n", state->recordSize);
 	printf("Use index: %d  Max/min: %d Bmap: %d\n", SBTREE_USING_INDEX(state->parameters), SBTREE_USING_MAX_MIN(state->parameters),
 								SBTREE_USING_BMAP(state->parameters));
 
-	/* TODO: These values would be set during recovery if database already exists. */
-	// state->nextPageId = 0;
-	// state->nextPageWriteId = 0;
+	
 	dbbufferInit(state->buffer);
 
 	state->compareKey = uint32Compare;
@@ -102,11 +100,11 @@ void sbtreeInit(sbtreeState *state)
 	state->bmOffset = 22; /* 1 byte offset. TODO: Remove this hard-code of location and size of bitmap */
 
 	/* Calculate number of records per page */
-	state->maxRecordsPerPage = (state->pageSize - state->headerSize) / state->recordSize;
+	state->maxRecordsPerPage = (state->buffer->pageSize - state->headerSize) / state->recordSize;
 	/* Interior records consist of key and id reference. Note: One extra id reference (child pointer). If N keys, have N+1 id references (pointers). */
-	state->maxInteriorRecordsPerPage = (state->pageSize - state->headerSize -sizeof(id_t)) / (state->keySize+sizeof(id_t));
+	state->maxInteriorRecordsPerPage = (state->buffer->pageSize - state->headerSize -sizeof(id_t)) / (state->keySize+sizeof(id_t));
 
-	// Hard-code for testing for now
+	/* Hard-code for testing */
 //	state->maxRecordsPerPage = 10;
 //	state->maxInteriorRecordsPerPage = 3;	
 	state->levels = 1;
@@ -258,7 +256,7 @@ void sbtreePrint(sbtreeState *state)
 @param     	pageNum
                 Physical page id of full leaf page just written to storage
 */
-void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum)
+int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum)
 {		
 	/* Read parent pages (nodes) until find space for new interior pointer (key, pageNum) */
 	int8_t l = 0;
@@ -270,12 +268,11 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 	{
 		buf = readPageBuffer(state->buffer, state->activePath[l], 0);
 		if (buf == NULL)
-			return;		/* TODO: Should handle error condition on failed read. */
+			return -1;		
 		
 		/* Determine if there is space in the page */		
 		count =  SBTREE_GET_COUNT(buf); 
-				
-		// if ( (count > state->maxInteriorRecordsPerPage) || (state->levels > 1 && l == 0 && count >= state->maxInteriorRecordsPerPage))
+					
 		if ( (count > state->maxInteriorRecordsPerPage) || (l < state->levels-1 && count >= state->maxInteriorRecordsPerPage))
 		{	/* Interior node at this level is full. Create a new node. */	
 
@@ -371,6 +368,7 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 		state->activePath[0] = writePage(state->buffer, state->writeBuffer);	/* Store root location */			
 		state->levels++;
 	}
+	return 0;
 }
 
 /**
@@ -397,7 +395,8 @@ int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 		/* Second pointer parameter is minimum key in currently full leaf node of data */
 		/* Need to copy key from current write buffer as will reuse buffer */
 		memcpy(state->tempKey, (void*) (state->writeBuffer+state->headerSize), state->keySize); 
-		sbtreeUpdateIndex(state, state->tempKey, key, pageNum);
+		if (sbtreeUpdateIndex(state, state->tempKey, key, pageNum))
+			return -1;
 
 		count = 0;			
 		initBufferPage(state->buffer, 0);					
@@ -410,22 +409,6 @@ int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 	/* Update count */
 	SBTREE_INC_COUNT(state->writeBuffer);	
 
-	/* Update Max */
-//	SBTREE_UPDATE_MAX(state->buffer, key);
-
-	/* Update Min */
-//	SBTREE_UPDATE_MIN(state->buffer, key);
-
-	/* TODO: Update statistics and bitmap */
-//	int8_t* bm = (int8_t*) (state->buffer+state->bmOffset);
-
-	// printf("Current bitmap: "BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(*bm));	
-//	state->updateBitmap(key, bm);
-
-	// printf("\nNew bitmap: "BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(*bm));
-	// printf("\n");
-
-	// sbtreePrintNodeBuffer(state, 0, 0, state->buffer);
 	return 0;
 }
 
@@ -586,80 +569,6 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 }
 
 /**
-@brief     	Writes a physical page to storage currently in given buffer.
-			Returns physical page number of page location.
-			Updates page to have next page id.
-@param     	state
-                SBTree algorithm state structure
-@param     	buffer
-                in-memory buffer containing page to write
-@return     
-            Physical page number of location where page is written
-*/
-int32_t writePageOld(sbtreeState *state, void *buffer)
-{    
-	/* Always writes to next page number. Returned to user. */	
-	int32_t pageNum = state->nextPageWriteId++;
-	// printf("\nWrite page: %d Key: %d\n", pageNum, *((int32_t*) (buffer+state->headerSize)));
-
-	/* Setup page number in header */	
-	memcpy(buffer, &(state->nextPageId), sizeof(id_t));
-	state->nextPageId++;
-
-	/* Seek to page location in file */
-    fseek(state->file, pageNum*state->pageSize, SEEK_SET);
-
-	fwrite(buffer, state->pageSize, 1, state->file);
-	#ifdef DEBUG_WRITE
-            printf("Wrote block. Idx: %d Cnt: %d\n", *((int32_t*) buffer), SBTREE_GET_COUNT(state->buffer));
-			printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (state->buffer+state->bmOffset))));
-            for (int k = 0; k < SBTREE_GET_COUNT(buffer); k++)
-            {
-                test_record_t *buf = (void *)(buffer + state->headerSize + k * state->recordSize);
-                printf("%d: Output Record: %d\n", k, buf->key);
-            }
-	#endif
-	return pageNum;
-}
-
-/**
-@brief     	Reads a physical page into a buffer. 
-			Returns buffer pointer or NULL if failure.
-@param     	state
-                SBTree algorithm state structure
-@param     	pageNum
-                physical page id to read
-@return     
-            Buffer pointer or NULL if failutre
-*/
-int8_t readPageOld(sbtreeState *state, int pageNum)
-{    
-	// printf("RP: %d\n", pageNum);
-    FILE* fp = state->file;
-    void *buf = state->buffer + state->pageSize;
-
-    /* Seek to page location in file */
-    fseek(fp, pageNum*state->pageSize, SEEK_SET);
-
-    /* Read page into start of buffer 1 */   
-    if (0 ==  fread(buf, state->pageSize, 1, fp))
-    {	return 1;       
-    }
-       
-    #ifdef DEBUG_READ
-        printf("Read block: %d Count: %d\r\n",pageNum, SBTREE_GET_COUNT(buf));   
-		printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (buf+state->bmOffset))));  		
-        // for (int k = 0; k < SBTREE_GET_COUNT(buf); k++)
-		for (int k = 0; k < 1; k++) // Only print first record
-        {
-            test_record_t *rec = (void *)(buf+state->headerSize+k*state->recordSize);
-            printf("%d: Record: %d\n", k, rec->key);
-        }
-    #endif
-	return 0;
-}
-
-/**
 @brief     	Flushes output buffer.
 @param     	state
                 SBTREE algorithm state structure
@@ -677,15 +586,16 @@ int8_t sbtreeFlush(sbtreeState *state)
 	memset(maxkey, 1, state->keySize);
 	 sbtreeUpdateIndex(state, state->tempKey, maxkey, pageNum);
 	*/
-// TODO: Look at what the key should be when flush. Needs to be one bigger than data set 
+	// TODO: Look at what the key should be when flush. Needs to be one bigger than data set 
 
-	// sbtreePrint(state);
 	void *maxkey = state->writeBuffer + state->recordSize * (SBTREE_GET_COUNT(state->writeBuffer)-1) + state->headerSize;
 	int32_t mkey = *((int32_t*) maxkey)+1;
 	maxkey = state->writeBuffer + state->headerSize;
 	int32_t minKey = *((int32_t*) maxkey);
-	sbtreeUpdateIndex(state, &minKey, &mkey, pageNum);
-	
+	if (sbtreeUpdateIndex(state, &minKey, &mkey, pageNum) != 0)
+		return -1;
+		
+	fflush(state->buffer->file);
 
 	/* Reinitialize buffer */
 	initBufferPage(state->buffer, 0);
@@ -694,26 +604,14 @@ int8_t sbtreeFlush(sbtreeState *state)
 
 
 /**
-@brief     	Initialize iterator on SBTREE structure.
+@brief     	Initialize iterator on SBTree structure.
 @param     	state
                 SBTree algorithm state structure
 @param     	it
                 SBTree iterator state structure
 */
 void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
-{
-	printf("Initializing iterator.\n");
-
-	/* Build query bitmap (if used) */
-	if (SBTREE_USING_BMAP(state->parameters))
-	{
-		uint8_t *bm = malloc(sizeof(uint8_t));
-		*bm = 0;
-		state->buildBitmap(it->minKey, it->maxKey, bm);
-		printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY(*bm));  	
-		it->queryBitmap = bm;
-	}
-
+{	
 	/* Find start location */
 	/* Starting at root search for key */
 	int8_t l;
@@ -745,15 +643,15 @@ void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
 
 
 /**
-@brief     	Initialize iterator on SBTREE structure.
+@brief     	Requests next key, data pair from iterator.
 @param     	state
                 SBTree algorithm state structure
 @param     	it
                 SBTree iterator state structure
 @param     	key
-                Key for record
+                Key for record (pointer returned)
 @param     	data
-                Data for record
+                Data for record (pointer returned)
 */
 int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **data)
 {	
@@ -814,11 +712,11 @@ int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **dat
 				{
 					uint8_t bm = 0; // SBTREE_GET_BITMAP(state, buf);
 					/* TODO: Need to make bitmap comparison more generic. */
-					if ( ( *((uint8_t*) it->queryBitmap) & bm) >= 1)
+					// if ( ( *((uint8_t*) it->queryBitmap) & bm) >= 1)
 					{	/* Overlap in bitmap - go to next page */
 						break;
 					}
-					else
+				//	else
 					{
 					//	printf("Skipping page as no bitmap overlap\n");
 					}					
