@@ -55,6 +55,8 @@ void dbbufferInit(dbbuffer *state)
 	state->numReads = 0;
 	state->numWrites = 0;
 	state->bufferHits = 0;
+	state->lastHit = 0;
+	state->nextBufferPage = 1;
 
 	for (count_t l=0; l < state->numPages; l++)
 		state->status[l] = 0;	
@@ -70,40 +72,73 @@ void dbbufferInit(dbbuffer *state)
 */
 void* readPage(dbbuffer *state, id_t pageNum)
 {    
-//	printf("RP: %d\n", pageNum);
-  	
-	  void *buf = state->buffer + state->pageSize;
+//	printf("RP: %d\n", pageNum);  	
+	void *buf;
+	count_t i;
 
 	/* Check to see if page is currently in buffer */
-	// printf("Buffer: %d  Request: %d\n", state->status[1], pageNum);
-	if (state->status[1] == pageNum && pageNum != 0)
+	for (i=1; i < state->numPages; i++)
 	{
-		state->bufferHits++;
-	//	return buf;
+		if (state->status[i] == pageNum && pageNum != 0)
+		{
+			state->bufferHits++;
+			buf = state->buffer + state->pageSize*i;
+			state->lastHit = state->status[i];
+			return buf;
+		}
 	}
-    FILE* fp = state->file;
-  
-    /* Seek to page location in file */
-    fseek(fp, pageNum*state->pageSize, SEEK_SET);
 
-    /* Read page into start of buffer 1 */   
-    if (0 ==  fread(buf, state->pageSize, 1, fp))
-    {	return NULL;       
-    }
-    state->numReads++;
-	state->status[1] = pageNum;
+	if (state->numPages == 2)
+	{	buf = state->buffer + state->pageSize;
+		i = 1;
+	}
+	else
+	{	
+		/* Reserve page #1 for root if have at least 3 buffers. */
+		if (state->activePath[0] == pageNum)
+		{	/* Request for root. */			
+			i = 1;
+		}
+		else
+		{
+			/* More than minimum pages. Some basic memory management using round robin buffer. */		
+			// printf("Buffer: %d  Request: %d\n", state->status[1], pageNum);
+			buf = NULL;
+			/* Determine buffer location for page */
+			/* TODO: This needs to be improved and may also consider locking pages */
+			for (i=2; i < state->numPages; i++)
+			{
+				if (state->status[i] == 0)	/* Empty page */
+				{	buf = state->buffer + state->pageSize*i;			
+					break;
+				}
+			}
 
-    #ifdef DEBUG_READ
-        printf("Read block: %d Count: %d\r\n",pageNum, SBTREE_GET_COUNT(buf));   
-		printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (buf+state->bmOffset))));  		
-        // for (int k = 0; k < SBTREE_GET_COUNT(buf); k++)
-		for (int k = 0; k < 1; k++) // Only print first record
-        {
-            test_record_t *rec = (void *)(buf+state->headerSize+k*state->recordSize);
-            printf("%d: Record: %d\n", k, rec->key);
-        }
-    #endif
-	return buf;
+			/* Pick the next page */
+			if (buf == NULL)
+			{
+				i = state->nextBufferPage;
+				state->nextBufferPage++;
+				while (1)
+				{
+					if (i > state->numPages-1)
+					{	i = 2;
+						state->nextBufferPage = 2;
+					}
+
+					if (state->status[i] != state->lastHit)
+					{	// buf = state->buffer + state->pageSize*i;
+						break;
+					}
+
+					i++;
+				}		
+			}
+		}
+	}
+	    
+	state->status[i] = pageNum;
+	return readPageBuffer(state, pageNum, i);
 }
 
 /**
@@ -118,7 +153,30 @@ void* readPage(dbbuffer *state, id_t pageNum)
 */
 void* readPageBuffer(dbbuffer *state, id_t pageNum, count_t bufferNum)
 {
-	return readPage(state, pageNum);
+	void *buf = state->buffer + bufferNum * state->pageSize;	
+	FILE* fp = state->file;
+  
+    /* Seek to page location in file */
+    fseek(fp, pageNum*state->pageSize, SEEK_SET);
+
+    /* Read page into start of buffer 1 */   
+    if (0 ==  fread(buf, state->pageSize, 1, fp))
+    {	return NULL;       
+    }
+    state->numReads++;
+	
+
+    #ifdef DEBUG_READ
+        printf("Read block: %d Count: %d\r\n",pageNum, SBTREE_GET_COUNT(buf));   
+		printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (buf+state->bmOffset))));  		
+        // for (int k = 0; k < SBTREE_GET_COUNT(buf); k++)
+		for (int k = 0; k < 1; k++) // Only print first record
+        {
+            test_record_t *rec = (void *)(buf+state->headerSize+k*state->recordSize);
+            printf("%d: Record: %d\n", k, rec->key);
+        }
+    #endif
+	return buf;
 }
 
 
@@ -141,7 +199,7 @@ int32_t writePage(dbbuffer *state, void* buffer)
 	/* Setup page number in header */	
 	memcpy(buffer, &(state->nextPageId), sizeof(id_t));
 	state->nextPageId++;
-
+	
 	/* Seek to page location in file */
     fseek(state->file, pageNum*state->pageSize, SEEK_SET);
 
@@ -187,7 +245,17 @@ void* initBufferPage(dbbuffer *state, int pageNum)
 */
 void closeBuffer(dbbuffer *state)
 {
+	printStats(state);	
+}
+
+/**
+@brief     	Prints statistics.
+@param     	state
+                DBbuffer state structure
+*/
+void printStats(dbbuffer *state)
+{
 	printf("Num reads: %d\n", state->numReads);
 	printf("Buffer hits: %d\n", state->bufferHits);
-	 printf("Num writes: %d\n", state->numWrites);
+	printf("Num writes: %d\n", state->numWrites);
 }

@@ -282,7 +282,7 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 			if (l < state->levels - 1)
 			{								
 				memcpy(buf + state->keySize * state->maxInteriorRecordsPerPage + sizeof(id_t) * (count) + state->headerSize, &prevPageNum, sizeof(id_t));											
-				state->activePath[l]  = writePage(state->buffer, buf);
+				state->activePath[l]  = writePage(state->buffer, buf);				
 			}
 		
 			initBufferPage(state->buffer, 0);
@@ -385,10 +385,7 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 {		
 	int16_t count =  SBTREE_GET_COUNT(state->writeBuffer); 
-	if (*((int32_t*)key) == 329)
-	{	sbtreePrint(state);
-		printf("HERE");
-	}
+
 	/* Write current page if full */
 	if (count >= state->maxRecordsPerPage)
 	{	
@@ -564,10 +561,7 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 	int8_t l;
 	void* next, *buf;
 	id_t childNum, nextId = state->activePath[0];
-	if (*((int32_t*)key) == 329)
-	{	sbtreePrint(state);
-		printf("HERE");
-	}
+	
 	for (l=0; l < state->levels; l++)
 	{		
 		buf = readPage(state->buffer, nextId);		

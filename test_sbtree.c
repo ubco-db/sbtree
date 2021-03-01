@@ -147,7 +147,7 @@ int8_t int32Comparator(
  */ 
 void runalltests_sbtree()
 {
-    int8_t M = 2;    
+    int8_t M = 8;    
     int32_t numRecords = 10000;
    
     /* Configure buffer */
@@ -165,6 +165,8 @@ void runalltests_sbtree()
     state->dataSize = 12;
     state->pageSize = 512;
     state->bufferSizeInBlocks = M;
+    buffer->activePath = state->activePath;
+
     // state->buffer  = malloc((size_t) state->bufferSizeInBlocks * state->pageSize);   
     state->tempKey = malloc(sizeof(int32_t)); 
     int8_t* recordBuffer = malloc(state->recordSize);
@@ -237,7 +239,9 @@ void runalltests_sbtree()
     printf("Elapsed Time: %0.6f s\n", ((double) (end - start)) / CLOCKS_PER_SEC);
     printf("Records inserted: %d\n", numRecords);
 
-    sbtreePrint(state);
+    // sbtreePrint(state);
+
+    printStats(buffer);
 
     /* Verify that all values can be found in tree */
     for (i = 0; i < numRecords; i++)    
@@ -251,6 +255,8 @@ void runalltests_sbtree()
             printf("Key: %d Data: %d\n", key, *((int32_t*) recordBuffer));
         }
     }
+
+    printStats(buffer);
 
     int32_t key = -1;
     int8_t result = sbtreeGet(state, &key, recordBuffer);
@@ -295,6 +301,7 @@ void runalltests_sbtree()
     else
         printf("FAILURE\n");    
     
+    printStats(buffer);
 
     /* Perform various queries to test performance */
     closeBuffer(buffer);

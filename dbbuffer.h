@@ -56,6 +56,9 @@ typedef struct {
 	id_t numWrites;					/* Number of page writes */
 	id_t numReads;					/* Number of page reads */
 	id_t bufferHits;				/* Number of pages returned from buffer rather than storage */
+	count_t lastHit;				/* Buffer id of last buffer page hit */
+	count_t nextBufferPage;			/* Next page buffer id to use. Round robin */
+	id_t* activePath;				/* Active path on insert. Also contains root. Helps to prioritize. */
 } dbbuffer;
 
 /**
@@ -115,6 +118,13 @@ void* initBufferPage(dbbuffer *state, int pageNum);
                 DBbuffer state structure
 */
 void closeBuffer(dbbuffer *state);
+
+/**
+@brief     	Prints statistics.
+@param     	state
+                DBbuffer state structure
+*/
+void printStats(dbbuffer *state);
 
 #if defined(__cplusplus)
 }
