@@ -274,7 +274,8 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 		/* Determine if there is space in the page */		
 		count =  SBTREE_GET_COUNT(buf); 
 				
-		if ( (count > state->maxInteriorRecordsPerPage) || (state->levels > 1 && l == 0 && count >= state->maxInteriorRecordsPerPage))
+		// if ( (count > state->maxInteriorRecordsPerPage) || (state->levels > 1 && l == 0 && count >= state->maxInteriorRecordsPerPage))
+		if ( (count > state->maxInteriorRecordsPerPage) || (l < state->levels-1 && count >= state->maxInteriorRecordsPerPage))
 		{	/* Interior node at this level is full. Create a new node. */	
 
 			/* If tree is beyond level 1, update parent node last child pointer as will have changed. Currently in buffer. */
@@ -384,7 +385,10 @@ void sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageNum
 int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 {		
 	int16_t count =  SBTREE_GET_COUNT(state->writeBuffer); 
-
+	if (*((int32_t*)key) == 329)
+	{	sbtreePrint(state);
+		printf("HERE");
+	}
 	/* Write current page if full */
 	if (count >= state->maxRecordsPerPage)
 	{	
@@ -560,7 +564,10 @@ int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 	int8_t l;
 	void* next, *buf;
 	id_t childNum, nextId = state->activePath[0];
-
+	if (*((int32_t*)key) == 329)
+	{	sbtreePrint(state);
+		printf("HERE");
+	}
 	for (l=0; l < state->levels; l++)
 	{		
 		buf = readPage(state->buffer, nextId);		
@@ -680,7 +687,9 @@ int8_t sbtreeFlush(sbtreeState *state)
 	// sbtreePrint(state);
 	void *maxkey = state->writeBuffer + state->recordSize * (SBTREE_GET_COUNT(state->writeBuffer)-1) + state->headerSize;
 	int32_t mkey = *((int32_t*) maxkey)+1;
-	sbtreeUpdateIndex(state, &mkey, &mkey, pageNum);
+	maxkey = state->writeBuffer + state->headerSize;
+	int32_t minKey = *((int32_t*) maxkey);
+	sbtreeUpdateIndex(state, &minKey, &mkey, pageNum);
 	
 
 	/* Reinitialize buffer */
@@ -787,6 +796,8 @@ int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **dat
 					}
 					it->lastIterRec[l] = 0;
 				}
+				if (l == -1)
+					return 0;		/* Exhausted entire tree */
 
 				for ( ; l < state->levels; l++)
 				{						

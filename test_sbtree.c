@@ -148,7 +148,7 @@ int8_t int32Comparator(
 void runalltests_sbtree()
 {
     int8_t M = 2;    
-    int32_t numRecords = 300;
+    int32_t numRecords = 10000;
    
     /* Configure buffer */
     dbbuffer* buffer = malloc(sizeof(dbbuffer));
@@ -255,12 +255,12 @@ void runalltests_sbtree()
     int32_t key = -1;
     int8_t result = sbtreeGet(state, &key, recordBuffer);
     if (result == 0) 
-        printf("Error: Key found: %d\n", key);
+        printf("Error1: Key found: %d\n", key);
 
-    key = 350;
+    key = 350000;
     result = sbtreeGet(state, &key, recordBuffer);
     if (result == 0) 
-        printf("Error: Key found: %d\n", key);
+        printf("Error2: Key found: %d\n", key);
 
     printf("Complete");
     free(recordBuffer);
@@ -286,7 +286,7 @@ void runalltests_sbtree()
         {   success = 0;
             printf("Key: %d Error\n", *itKey);
         }
-        i++;
+        i++;        
     }
     printf("Read records: %d\n", i);
 

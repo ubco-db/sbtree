@@ -79,7 +79,7 @@ void* readPage(dbbuffer *state, id_t pageNum)
 	if (state->status[1] == pageNum && pageNum != 0)
 	{
 		state->bufferHits++;
-		return buf;
+	//	return buf;
 	}
     FILE* fp = state->file;
   

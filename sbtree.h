@@ -102,7 +102,7 @@ typedef struct {
 	int8_t (*inBitmap)(void *data, void *bm);	/* Returns 1 if data (key) value is a valid value given the bitmap */
 	void (*buildBitmap)(void *min, void *max, void *bm);	/* Builds a query bitmap given [min,max] range of keys */
 	uint8_t levels;								/* Number of levels in tree */
-	id_t activePath[5];							/* Active path of page indexes from root (in position 0) to node just above leaf */
+	id_t activePath[8];							/* Active path of page indexes from root (in position 0) to node just above leaf */
 	id_t nextPageWriteId;						/* Physical page id of next page to write. */
 	void *tempKey;								/* Used to temporarily store a key value. Space must be preallocated. */
 	dbbuffer *buffer;							/* Pre-allocated memory buffer for use by algorithm */
@@ -110,8 +110,8 @@ typedef struct {
 } sbtreeState;
 
 typedef struct {
-	id_t activeIteratorPath[5];					/* Active path of iterator from root (in position 0) to current leaf node */    
-	count_t lastIterRec[5];						/* Last record processed by iterator at each level */
+	id_t activeIteratorPath[8];					/* Active path of iterator from root (in position 0) to current leaf node */    
+	count_t lastIterRec[8];						/* Last record processed by iterator at each level */
 	void*	minKey;
 	void*	maxKey;
     void*	minTime;
