@@ -1,100 +1,85 @@
-# SBITS Embedded Index Structure for Time Series Data 
+# Sequential B-tree (SBtree) Embedded Index Structure
 
-SBITS is a high performance embedded data storage and index structure for time series data for embedded systems and Arduino:
+The sequential B-tree (SBtree) efficiently stores data in a B-tree structure that is inserted in sorted order. Inserts are buffered and require no searching in the tree. Queries can typically be performed with less than 4 page reads depending on memory size. The SBtree uses a minimal amount of memory for use with embedded systems. Key features:
 
-1. Uses the minimum of two page buffers for performing all operations. The memory usage is less than 1.5 KB for 512 byte pages.
-2. Performance is several times faster than using B-trees and hash-based indexes. Simplifies data management without worrying about low-level details and storing data in raw files.
-3. No use of dynamic memory (i.e. malloc()). All memory is pre-allocated at creation of the index.
-4. Efficient insert (put) and query (get) of arbitrary key-value data. Ability to search data both on timestamp (key) and by data value.
-5. Option to store time series data with or without an index. Adding an index allows for faster retrieval of records based on data value.
-6. Support for iterator to traverse data in sorted order.
-7. Easy to use and include in existing projects. Requires only an Arduino with an SD card.
-8. Open source license. Free to use for commerical and open source projects.
+1. Uses only two page buffers for performing all operations. The memory usage is less than 1.5 KB for 512 byte pages.
+2. Optimized performance for sequential data such as time series data.
+3. No use of dynamic memory (i.e. malloc()). All memory is pre-allocated at creation of the tree.
+4. Efficient insert (put) and query (get) of arbitrary key-value data. Ability to search data on key.
+5. Support for iterator to traverse data in sorted order.
+6. Easy to use and include in existing projects. 
+7. Open source license. Free to use for commerical and open source projects.
 
 ## Code Files
 
-* test_sbits.h - test file demonstrating how to get, put, and iterate through data in index
-* main.cpp - main Arduino code file
-* sbits.h, sbits.c - implementation of SBITS index structure supporting arbitrary key-value data items
+* test_sbtree.c - test file demonstrating how to get, put, and iterate through data in index
+* sbtree.h, sbtree.c - implementation of sequential B-tree structure supporting arbitrary key-value data items
+* dbbuffer.h, dbbuffer.c - provides buffering of pages in memory
 
-## Support Code Files
-
-* serial_c_iface.h, serial_c_iface.cpp - allows printf() on Arduino
-* sd_stdio_c_iface.h, sd_stdio_c_iface.h - allows use of stdio file API (e.g. fopen())
-
-## Documentation
-
-A paper describing SBITS use for time series indexing is [available from the publisher](https://www.scitepress.org/Link.aspx?doi=10.5220/0010318800920099) and a [pre-print is also available](SBITS_time_series_index.pdf).
 
 ## Usage
 
 ### Setup Index and Configure Memory
 
 ```c
-/* Configure SBITS state */
-sbitsState* state = (sbitsState*) malloc(sizeof(sbitsState));
+/* Configure buffer */
+dbbuffer* buffer = malloc(sizeof(dbbuffer));
+buffer->pageSize = 512;
+uint16_t M = 10;
+buffer->numPages = M;
+buffer->status = malloc(sizeof(id_t)*M);
+buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
+
+/* Setup data file. */
+FILE *fp;
+fp = fopen("myfile.bin", "w+b");
+if (NULL == fp) {
+    printf("Error: Can't open file!\n");
+    return;
+}
+
+buffer->file = fp;
+
+/* Configure SBTree state */
+sbtreeState* state = malloc(sizeof(sbtreeState));
 
 state->recordSize = 16;
 state->keySize = 4;
-state->dataSize = 12;
-state->pageSize = 512;
-uint8_t M = 4;					/* Using an index requires 4 buffers. Minimum memory without an index is 2 buffers. */
-state->bufferSizeInBlocks = M;
-state->buffer  = malloc((size_t) state->bufferSizeInBlocks * state->pageSize);    
-int8_t* recordBuffer = (int8_t*) malloc(state->recordSize);   
+state->dataSize = 12;           
+state->buffer = buffer;
 
-/* Address level parameters */
-state->startAddress = 0;
-state->endAddress = state->pageSize * 1000;  /* Decide how much memory to use for data storage */	
-state->eraseSizeInPages = 4;
-state->parameters = SBITS_USE_MAX_MIN | SBITS_USE_BMAP | SBITS_USE_INDEX;
+state->tempKey = malloc(sizeof(int32_t)); 
 
-/* Initialize SBITS structure with parameters */
-sbitsInit(state);
+/* Initialize SBTree structure */
+sbtreeInit(state);
 ```
 
 ### Insert (put) items into tree
 
 ```c
 /* keyPtr points to key to insert. dataPtr points to associated data value. */
-sbitsPut(state, (void*) keyPtr, (void*) dataPtr);
+sbtreePut(state, (void*) keyPtr, (void*) dataPtr);
 ```
 
 ### Query (get) items from tree
 
 ```c
 /* keyPtr points to key to search for. dataPtr must point to pre-allocated space to copy data into. */
-int8_t result = sbitsGet(state, (void*) keyPtr, (void*) dataPtr);
+int8_t result = sbtreeGet(state, (void*) keyPtr, (void*) dataPtr);
 ```
 
 ### Iterate through items in tree
 
 ```c
 /* Iterator with filter on keys */
-sbitsIterator it;
+sbtreeIterator it;
 int32_t *itKey, *itData;
 
 uint32_t minKey = 1, maxKey = 1000;     
 it.minKey = &minKey; 
-it.maxKey = &maxKey;
-it.minData = NULL;
-it.maxData = NULL;    
+it.maxKey = &maxKey; 
 
-sbitsInitIterator(state, &it);
-
-while (sbitsNext(state, &it, (void**) &itKey, (void**) &itData))
-{                      
-	/* Process record */	
-}
-
-/* Iterator with filter on data */       
-it.minKey = NULL;    
-it.maxKey = NULL;
-uint32_t minData = 90, maxData = 100;  
-it.minData = &minData;
-it.maxData = &maxData;    
-
-sbitsInitIterator(state, &it);
+sbtreeInitIterator(state, &it);
 
 while (sbitsNext(state, &it, (void**) &itKey, (void**) &itData))
 {                      
