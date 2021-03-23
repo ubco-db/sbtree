@@ -4,7 +4,8 @@
 @author		Ramon Lawrence
 @brief		Light-weight buffer implementation for small embedded devices.
 @copyright	Copyright 2021
-			The University of British Columbia,		
+			The University of British Columbia,
+			Ramon Lawrence		
 @par Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -242,4 +243,16 @@ void printStats(dbbuffer *state)
 	printf("Num reads: %d\n", state->numReads);
 	printf("Buffer hits: %d\n", state->bufferHits);
 	printf("Num writes: %d\n", state->numWrites);
+}
+
+/**
+@brief     	Clears statistics.
+@param     	state
+                DBbuffer state structure
+*/
+void dbbufferClearStats(dbbuffer *state)
+{
+	state->numReads = 0;
+	state->numWrites = 0;
+	state->bufferHits = 0;	
 }

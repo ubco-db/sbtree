@@ -4,7 +4,8 @@
 @author		Ramon Lawrence
 @brief		Implementation for sequential B-tree.
 @copyright	Copyright 2021
-			The University of British Columbia,		
+			The University of British Columbia,
+			Ramon Lawrence		
 @par Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -81,23 +82,17 @@ static int8_t byteCompare(void *a, void *b, int16_t size)
 void sbtreeInit(sbtreeState *state)
 {
 	printf("Initializing SBTree.\n");
-	printf("Buffer size: %d  Page size: %d\n", state->buffer->numPages, state->buffer->pageSize);	
 	state->recordSize = state->keySize + state->dataSize;
-	printf("Record size: %d\n", state->recordSize);
-	printf("Use index: %d  Max/min: %d Bmap: %d\n", SBTREE_USING_INDEX(state->parameters), SBTREE_USING_MAX_MIN(state->parameters),
-								SBTREE_USING_BMAP(state->parameters));
-
+	printf("Buffer size: %d  Page size: %d Record size: %d\n", state->buffer->numPages, state->buffer->pageSize, state->recordSize);	
 	
 	dbbufferInit(state->buffer);
+	state->buffer->activePath = state->activePath;
 
 	state->compareKey = uint32Compare;
-
-	/* Calculate block header size */
-	/* Header size fixed: 14 bytes: 4 byte id, 2 for record count. */
-	/* Variable size header if use min/max and bitmap indexing */		
-	state->headerSize = 6;
-	/* TODO: Add variable size header calculation. */
-	state->bmOffset = 22; /* 1 byte offset. TODO: Remove this hard-code of location and size of bitmap */
+	
+	/* Set block header size */
+	/* Header size fixed: 6 bytes: 4 byte id, 2 for record count. */	
+	state->headerSize = 6;	
 
 	/* Calculate number of records per page */
 	state->maxRecordsPerPage = (state->buffer->pageSize - state->headerSize) / state->recordSize;
@@ -219,7 +214,7 @@ void sbtreePrintNode(sbtreeState *state, int pageNum, int depth)
 		}	
 		/* Print last child node if active */
 		int32_t val = *((int32_t*) (buf+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + c*sizeof(id_t)));
-		if (val != 0)	/* TODO: Better way to check for invalid node */
+		if (val != 0)	
 		{
 			if (depth+1 < state->levels && pageNum == state->activePath[depth])
 			{	/* Current pointer is on active path. */
@@ -705,24 +700,7 @@ int8_t sbtreeNext(sbtreeState *state, sbtreeIterator *it, void **key, void **dat
 						return 0;	
 				}
 				it->currentBuffer = buf;
-
-				/* TODO: Check timestamps, min/max, and bitmap to see if query range overlaps with range of records	stored in block */
-				/* If not read next block */
-				if (SBTREE_USING_BMAP(state->parameters))
-				{
-					uint8_t bm = 0; // SBTREE_GET_BITMAP(state, buf);
-					/* TODO: Need to make bitmap comparison more generic. */
-					// if ( ( *((uint8_t*) it->queryBitmap) & bm) >= 1)
-					{	/* Overlap in bitmap - go to next page */
-						break;
-					}
-				//	else
-					{
-					//	printf("Skipping page as no bitmap overlap\n");
-					}					
-				}
-				else
-					break;
+				break;				
 			}
 		}
 		

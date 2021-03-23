@@ -50,7 +50,7 @@ typedef struct {
 	void*  	buffer;					/* Allocated memory for buffer */
 	count_t	pageSize;				/* Size of buffer page */
 	count_t	numPages;				/* Number of buffer pages */    
-	FILE 	*file;					/* File for storing data records. TODO: Will be replaced with RAW memory access routines. */
+	FILE 	*file;					/* File for storing data records. */
 	id_t 	nextPageId;				/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
 	id_t 	nextPageWriteId;		/* Physical page id of next page to write. */	
 	id_t 	numWrites;				/* Number of page writes */
@@ -125,6 +125,13 @@ void closeBuffer(dbbuffer *state);
                 DBbuffer state structure
 */
 void printStats(dbbuffer *state);
+
+/**
+@brief     	Clears statistics.
+@param     	state
+                DBbuffer state structure
+*/
+void dbbufferClearStats(dbbuffer *state);
 
 #if defined(__cplusplus)
 }

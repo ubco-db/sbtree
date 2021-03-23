@@ -38,113 +38,8 @@
 
 #include "sbtree.h"
 
-
-/**
- * Runs all tests and collects benchmarks
- */ 
-void runalltests_sbtree()
+void testIterator(sbtreeState *state)
 {
-    int8_t M = 2;    
-    int32_t numRecords = 1000000;
-   
-    /* Configure buffer */
-    dbbuffer* buffer = malloc(sizeof(dbbuffer));
-    buffer->pageSize = 512;
-    buffer->numPages = M;
-    buffer->status = malloc(sizeof(id_t)*M);
-    buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
-
-    /* Configure SBTree state */
-    sbtreeState* state = malloc(sizeof(sbtreeState));
-
-    state->recordSize = 16;
-    state->keySize = 4;
-    state->dataSize = 12;       
-    buffer->activePath = state->activePath;
-
-    state->tempKey = malloc(sizeof(int32_t)); 
-    int8_t* recordBuffer = malloc(state->recordSize);
-
-    /* Setup output file. TODO: Will replace with direct memory access. */
-    FILE *fp;
-    fp = fopen("myfile.bin", "w+b");
-    if (NULL == fp) {
-        printf("Error: Can't open file!\n");
-        return;
-    }
-    
-    buffer->file = fp;
-
-    state->parameters = 0;    
-    state->buffer = buffer;
-
-    /* Initialize SBTree structure with parameters */
-    sbtreeInit(state);
-
-       /* Data record is empty. Only need to reset to 0 once as reusing struct. */    
-    int32_t i;
-    for (i = 0; i < state->recordSize-4; i++) // 4 is the size of the key
-    {
-        recordBuffer[i + sizeof(int32_t)] = 0;
-    }
-
-    clock_t start = clock();
-
-    /* Insert records into structure */    
-    for (i = 0; i < numRecords; i++)
-    {        
-        *((int32_t*) recordBuffer) = i;
-        *((int32_t*) (recordBuffer+4)) = i;
-     
-        sbtreePut(state, recordBuffer, (void*) (recordBuffer + 4));    
-        
-        if (i % 10 == 0)
-        {
-   //         printf("KEY: %d\n",i);
-    //        sbtreePrint(state);   
-        }        
-    }    
- 
-    sbtreeFlush(state);    
-
-    clock_t end = clock();
-    printf("Elapsed Time: %0.6f s\n", ((double) (end - start)) / CLOCKS_PER_SEC);
-    printf("Records inserted: %d\n", numRecords);
-
-    // sbtreePrint(state);
-
-    printStats(buffer);
-
-    /* Verify that all values can be found in tree */
-    for (i = 0; i < numRecords; i++)    
-    { 
-        int32_t key = i;
-        int8_t result = sbtreeGet(state, &key, recordBuffer);
-        if (result != 0) 
-            printf("ERROR: Failed to find: %d\n", key);
-        else if (*((int32_t*) recordBuffer) != key)
-        {   printf("ERROR: Wrong data for: %d\n", key);
-            printf("Key: %d Data: %d\n", key, *((int32_t*) recordBuffer));
-        }
-    }
-
-    printStats(buffer);
-
-    /* Below minimum key search */
-    int32_t key = -1;
-    int8_t result = sbtreeGet(state, &key, recordBuffer);
-    if (result == 0) 
-        printf("Error1: Key found: %d\n", key);
-
-    /* Above maximum key search */
-    key = 3500000;
-    result = sbtreeGet(state, &key, recordBuffer);
-    if (result == 0) 
-        printf("Error2: Key found: %d\n", key);
-
-    printf("Complete");
-    free(recordBuffer);
-    
     sbtreeIterator it;
     int mv = 40;     // For all records, select mv = 1.
     it.minKey = &mv;
@@ -153,7 +48,7 @@ void runalltests_sbtree()
     void *data;
 
     sbtreeInitIterator(state, &it);
-    i = 0;
+    uint32_t i = 0;
     int8_t success = 1;    
     int32_t *itKey, *itData;
 
@@ -173,12 +68,242 @@ void runalltests_sbtree()
     else
         printf("FAILURE\n");    
     
-    printStats(buffer);
+    printStats(state->buffer);
+}
 
-    /* Perform various queries to test performance */
-    closeBuffer(buffer);    
+/**
+ * Runs all tests and collects benchmarks
+ */ 
+void runalltests_sbtree()
+{
+    printf("\nSTARTING SEQUENTIAL B-TREE TESTS.\n");
+
+    int8_t M = 10;    
+    int32_t numRecords = 1000000;
+    uint32_t numSteps = 10, stepSize = numRecords / numSteps;
+    count_t r, numRuns = 3, l;
+    uint32_t times[numSteps][numRuns];
+    uint32_t reads[numSteps][numRuns];
+    uint32_t writes[numSteps][numRuns];    
+    uint32_t hits[numSteps][numRuns];    
+    uint32_t rtimes[numSteps][numRuns];
+    uint32_t rreads[numSteps][numRuns];
+    uint32_t rhits[numSteps][numRuns];    
+   
+    for (r=0; r < numRuns; r++)
+    {
+        printf("\nRun: %d\n", (r+1));
+
+        /* Configure buffer */
+        dbbuffer* buffer = malloc(sizeof(dbbuffer));
+        buffer->pageSize = 512;
+        buffer->numPages = M;
+        buffer->status = malloc(sizeof(id_t)*M);
+        buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
+
+        /* Setup data file. */
+        FILE *fp;
+        fp = fopen("myfile.bin", "w+b");
+        if (NULL == fp) {
+            printf("Error: Can't open file!\n");
+            return;
+        }
+        
+        buffer->file = fp;
+
+        /* Configure SBTree state */
+        sbtreeState* state = malloc(sizeof(sbtreeState));
+
+        state->recordSize = 16;
+        state->keySize = 4;
+        state->dataSize = 12;           
+        state->buffer = buffer;
+
+        state->tempKey = malloc(sizeof(int32_t)); 
+        int8_t* recordBuffer = malloc(state->recordSize);
+
+        /* Initialize SBTree structure */
+        sbtreeInit(state);
+
+        /* Initial contents of test record. */    
+        int32_t i;
+        for (i = 0; i < state->recordSize-4; i++) 
+        {
+            recordBuffer[i + sizeof(int32_t)] = 0;
+        }
+
+        clock_t start = clock();
+
+        /* Insert records into structure */    
+        for (i = 0; i < numRecords; i++)
+        {        
+            *((int32_t*) recordBuffer) = i;
+            *((int32_t*) (recordBuffer+4)) = i;
+        
+            sbtreePut(state, recordBuffer, (void*) (recordBuffer + 4));    
+            
+            if (i % stepSize == 0)
+            {           
+                printf("Num: %lu KEY: %lu\n", i, i);
+                // btreePrint(state);               
+                l = i / stepSize -1;
+                if (l < numSteps && l >= 0)
+                {
+                    times[l][r] = (clock()-start)*1000/CLOCKS_PER_SEC;
+                    reads[l][r] = state->buffer->numReads;
+                    writes[l][r] = state->buffer->numWrites;                    
+                    hits[l][r] = state->buffer->bufferHits;                     
+                }
+            }       
+        }    
     
-    free(state->buffer->buffer);
+        sbtreeFlush(state);    
+
+        clock_t end = clock();
+        l = numSteps-1;
+        times[l][r] = (end-start)*1000/CLOCKS_PER_SEC;
+        reads[l][r] = state->buffer->numReads;
+        writes[l][r] = state->buffer->numWrites;        
+        hits[l][r] = state->buffer->bufferHits; 
+        printStats(state->buffer);
+
+        printf("Elapsed Time: %lu ms\n", times[l][r]);
+        printf("Records inserted: %d\n", numRecords);
+
+        /* Clear stats */
+        dbbufferClearStats(state->buffer);
+        // sbtreePrint(state);        
+
+        /* Query all values in tree */
+        for (i = 0; i < numRecords; i++)    
+        { 
+            int32_t key = i;
+            int8_t result = sbtreeGet(state, &key, recordBuffer);
+            if (result != 0) 
+                printf("ERROR: Failed to find: %d\n", key);
+            else if (*((int32_t*) recordBuffer) != key)
+            {   printf("ERROR: Wrong data for: %d\n", key);
+                printf("Key: %d Data: %d\n", key, *((int32_t*) recordBuffer));
+            }
+
+            if (i % stepSize == 0)
+            {                           
+                // btreePrint(state);               
+                l = i / stepSize - 1;
+                if (l < numSteps && l >= 0)
+                {
+                    rtimes[l][r] = (clock()-start)*1000/CLOCKS_PER_SEC;
+                    rreads[l][r] = state->buffer->numReads;                    
+                    rhits[l][r] = state->buffer->bufferHits;                     
+                }
+            }   
+        }
+
+        l = numSteps-1;       
+        rtimes[l][r] = (clock()-start)*1000/CLOCKS_PER_SEC;
+        rreads[l][r] = state->buffer->numReads;                    
+        rhits[l][r] = state->buffer->bufferHits;   
+        printStats(state->buffer);       
+        printf("Elapsed Time: %lu ms\n", rtimes[l][r]);
+        printf("Records queried: %lu\n", numRecords);  
+
+        /* Below minimum key search */
+        int32_t key = -1;
+        int8_t result = sbtreeGet(state, &key, recordBuffer);
+        if (result == 0) 
+            printf("Error1: Key found: %d\n", key);
+
+        /* Above maximum key search */
+        key = 3500000;
+        result = sbtreeGet(state, &key, recordBuffer);
+        if (result == 0) 
+            printf("Error2: Key found: %d\n", key);
+        
+        /* Optional: test iterator */
+        testIterator(state);
+
+        /* Clean up and free memory */
+        closeBuffer(buffer);    
+        
+        free(state->tempKey);        
+        free(recordBuffer);
+
+        free(buffer->status);
+        free(state->buffer->buffer);
+        free(buffer);
+        free(state);
+    }
+
+    // Prints results
+    uint32_t sum;
+    for (count_t i=1; i <= numSteps; i++)
+    {
+        printf("Stats for %lu:\n", i*stepSize);
+    
+        printf("Reads:   ");
+        sum = 0;
+        for (r=0 ; r < numRuns; r++)
+        {
+            sum += reads[i-1][r];
+            printf("\t%lu", reads[i-1][r]);
+        }
+        printf("\t%lu\n", sum/r);
+
+        printf("Writes: ");
+        sum = 0;
+        for (r=0 ; r < numRuns; r++)
+        {
+            sum += writes[i-1][r];
+            printf("\t%lu", writes[i-1][r]);
+        }
+        printf("\t%lu\n", sum/r);                       
+
+        printf("Buffer hits: ");
+        sum = 0;
+        for (r=0 ; r < numRuns; r++)
+        {
+            sum += hits[i-1][r];
+            printf("\t%lu", hits[i-1][r]);
+        }
+        printf("\t%lu\n", sum/r);
+        
+
+        printf("Write Time: ");
+        sum = 0;
+        for (r=0 ; r < numRuns; r++)
+        {
+            sum += times[i-1][r];
+            printf("\t%lu", times[i-1][r]);
+        }
+        printf("\t%lu\n", sum/r);
+        
+        printf("R Time: ");
+        sum = 0;
+        for (r=0 ; r < numRuns; r++)
+        {
+            sum += rtimes[i-1][r];
+            printf("\t%lu", rtimes[i-1][r]);
+        }
+        printf("\t%lu\n", sum/r);
+
+        printf("R Reads: ");
+        sum = 0;
+        for (r=0 ; r < numRuns; r++)
+        {
+            sum += rreads[i-1][r];
+            printf("\t%lu", rreads[i-1][r]);
+        }
+        printf("\t%lu\n", sum/r);
+
+        printf("R Buffer hits: ");
+        sum = 0;
+        for (r=0 ; r < numRuns; r++)
+        {
+            sum += rhits[i-1][r];
+            printf("\t%lu", rhits[i-1][r]);
+        }
+        printf("\t%lu\n", sum/r);
+    }
 }
 
 /**

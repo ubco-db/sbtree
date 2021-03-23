@@ -4,7 +4,8 @@
 @author		Ramon Lawrence
 @brief		Implementation for sequential, copy-on-write B-tree.
 @copyright	Copyright 2021
-			The University of British Columbia,		
+			The University of British Columbia,
+			Ramon Lawrence		
 @par Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -48,14 +49,6 @@ typedef uint32_t id_t;
 /* Define type for page record count. */
 typedef uint16_t count_t;
 
-#define SBTREE_USE_INDEX	1
-#define SBTREE_USE_MAX_MIN	2
-#define SBTREE_USE_BMAP		4
-
-#define SBTREE_USING_INDEX(x)  	x & SBTREE_USE_INDEX
-#define SBTREE_USING_MAX_MIN(x) x & SBTREE_USE_MAX_MIN
-#define SBTREE_USING_BMAP(x)  	x & SBTREE_USE_BMAP
-
 /* Offsets with header */
 #define SBTREE_COUNT_OFFSET		sizeof(id_t)
 
@@ -85,7 +78,6 @@ typedef uint16_t count_t;
 #define MAX_LEVEL 8
 
 typedef struct {			
-	uint8_t parameters;    						/* Parameter flags for indexing and bitmaps */
 	uint8_t keySize;							/* Size of key in bytes (fixed-size records) */
 	uint8_t dataSize;							/* Size of data in bytes (fixed-size records) */
 	uint8_t recordSize;							/* Size of record in bytes (fixed-size records) */
