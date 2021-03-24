@@ -83,7 +83,7 @@ it.maxKey = &maxKey;
 
 sbtreeInitIterator(state, &it);
 
-while (sbitsNext(state, &it, (void**) &itKey, (void**) &itData))
+while (sbtreeNext(state, &it, (void**) &itKey, (void**) &itData))
 {                      
 	/* Process record */	
 }
