@@ -15,7 +15,9 @@ The sequential B-tree (SBtree) efficiently stores data in a B-tree structure tha
 * test_sbtree.c - test file demonstrating how to get, put, and iterate through data in index
 * sbtree.h, sbtree.c - implementation of sequential B-tree structure supporting arbitrary key-value data items
 * dbbuffer.h, dbbuffer.c - provides buffering of pages in memory
-
+* fileStorage.h, fileStorage.c - support for file based storage including on SD cards
+* memStorage.h, memStorage.c - support for raw memory (NOR/NAND) storage
+* storage.h - generic storage interface
 
 ## Usage
 
@@ -81,7 +83,7 @@ it.maxKey = &maxKey;
 
 sbtreeInitIterator(state, &it);
 
-while (sbitsNext(state, &it, (void**) &itKey, (void**) &itData))
+while (sbtreeNext(state, &it, (void**) &itKey, (void**) &itData))
 {                      
 	/* Process record */	
 }
