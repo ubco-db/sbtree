@@ -151,15 +151,9 @@ void* readPage(dbbuffer *state, id_t pageNum)
 void* readPageBuffer(dbbuffer *state, id_t pageNum, count_t bufferNum)
 {
 	void *buf = state->buffer + bufferNum * state->pageSize;	
-	FILE* fp = state->file;
-  
-    /* Seek to page location in file */
-    fseek(fp, pageNum*state->pageSize, SEEK_SET);
 
-    /* Read page into start of buffer 1 */   
-    if (0 ==  fread(buf, state->pageSize, 1, fp))
-    	return NULL;       
-    
+	state->storage->readPage(state->storage, pageNum, state->pageSize, buf);
+	
     state->numReads++;
 	   
 	return buf;
@@ -184,10 +178,9 @@ int32_t writePage(dbbuffer *state, void* buffer)
 	memcpy(buffer, &(state->nextPageId), sizeof(id_t));
 	state->nextPageId++;
 	
-	/* Seek to page location in file */
-    fseek(state->file, pageNum*state->pageSize, SEEK_SET);
+	/* Save page in storage */
+	state->storage->writePage(state->storage, pageNum, state->pageSize, buffer);
 
-	fwrite(buffer, state->pageSize, 1, state->file);
 	#ifdef DEBUG_WRITE
             printf("Wrote block. Idx: %d Cnt: %d\n", *((int32_t*) buffer), SBTREE_GET_COUNT(state->buffer));
 			printf("BM: "BYTE_TO_BINARY_PATTERN"\n", BYTE_TO_BINARY( *((uint8_t*) (state->buffer+state->bmOffset))));
@@ -230,8 +223,9 @@ void* initBufferPage(dbbuffer *state, int pageNum)
 void closeBuffer(dbbuffer *state)
 {
 	printStats(state);	
-	fclose(state->file);
+	state->storage->close(state->storage);	
 }
+
 
 /**
 @brief     	Prints statistics.
@@ -244,6 +238,7 @@ void printStats(dbbuffer *state)
 	printf("Buffer hits: %d\n", state->bufferHits);
 	printf("Num writes: %d\n", state->numWrites);
 }
+
 
 /**
 @brief     	Clears statistics.

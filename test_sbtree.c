@@ -2,10 +2,11 @@
 /**
 @file		test_sbtree.c
 @author		Ramon Lawrence
-@brief		This file does performance/correctness testing of sequential bitmap 
-            indexing for time series (SBTree).
+@brief		This file does performance/correctness testing of sequential,
+            copy-on-write B-tree (SBTree).
 @copyright	Copyright 2021
-			The University of British Columbia,		
+			The University of British Columbia,
+            Ramon Lawrence		
 @par Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -37,11 +38,16 @@
 #include <string.h>
 
 #include "sbtree.h"
+#include "fileStorage.h"
+#include "memStorage.h"
 
+/**
+ * Test iterator
+ */
 void testIterator(sbtreeState *state)
 {
     sbtreeIterator it;
-    int mv = 40;     // For all records, select mv = 1.
+    int mv = 40;     
     it.minKey = &mv;
     int v = 299;
     it.maxKey = &v;   
@@ -78,7 +84,7 @@ void runalltests_sbtree()
 {
     printf("\nSTARTING SEQUENTIAL B-TREE TESTS.\n");
 
-    int8_t M = 10;    
+    int8_t M = 5;    
     int32_t numRecords = 1000000;
     uint32_t numSteps = 10, stepSize = numRecords / numSteps;
     count_t r, numRuns = 3, l;
@@ -94,22 +100,32 @@ void runalltests_sbtree()
     {
         printf("\nRun: %d\n", (r+1));
 
+        /* Configure file storage */        
+        fileStorageState *storage = malloc(sizeof(fileStorageState));
+        storage->fileName = "myfile.bin";
+        if (fileStorageInit((storageState*) storage) != 0)
+        {
+            printf("Error: Cannot initialize storage!\n");
+            return;
+        }        
+
+        /* Configure memory storage */
+        /*
+        memStorageState *storage = malloc(sizeof(memStorageState));        
+        if (memStorageInit((storageState*) storage) != 0)
+        {
+            printf("Error: Cannot initialize storage!\n");
+            return;
+        }
+        */
+       
         /* Configure buffer */
         dbbuffer* buffer = malloc(sizeof(dbbuffer));
         buffer->pageSize = 512;
         buffer->numPages = M;
         buffer->status = malloc(sizeof(id_t)*M);
         buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
-
-        /* Setup data file. */
-        FILE *fp;
-        fp = fopen("myfile.bin", "w+b");
-        if (NULL == fp) {
-            printf("Error: Can't open file!\n");
-            return;
-        }
-        
-        buffer->file = fp;
+        buffer->storage = (storageState*) storage;       
 
         /* Configure SBTree state */
         sbtreeState* state = malloc(sizeof(sbtreeState));
@@ -132,6 +148,7 @@ void runalltests_sbtree()
             recordBuffer[i + sizeof(int32_t)] = 0;
         }
 
+        printf("\nInsert test:\n");
         clock_t start = clock();
 
         /* Insert records into structure */    
@@ -173,6 +190,9 @@ void runalltests_sbtree()
         /* Clear stats */
         dbbufferClearStats(state->buffer);
         // sbtreePrint(state);        
+
+        printf("\nQuery test:\n");
+        start = clock();
 
         /* Query all values in tree */
         for (i = 0; i < numRecords; i++)    

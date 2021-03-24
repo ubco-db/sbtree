@@ -141,6 +141,7 @@ void* sbtreeGetMaxKey(sbtreeState *state, void *buffer)
 	return (void*) (buffer+state->headerSize+(count-1)*state->recordSize);
 }
 
+
 /**
 @brief     	Print a node in an in-memory buffer.
 @param     	state
@@ -185,6 +186,7 @@ void sbtreePrintNodeBuffer(sbtreeState *state, int pageNum, int depth, void *buf
 		*/
 	}
 }
+
 
 /**
 @brief     	Print a node read from storage.
@@ -590,7 +592,7 @@ int8_t sbtreeFlush(sbtreeState *state)
 	if (sbtreeUpdateIndex(state, &minKey, &mkey, pageNum) != 0)
 		return -1;
 		
-	fflush(state->buffer->file);
+	state->buffer->storage->flush(state->buffer->storage);
 
 	/* Reinitialize buffer */
 	initBufferPage(state->buffer, 0);

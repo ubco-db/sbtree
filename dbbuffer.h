@@ -4,7 +4,8 @@
 @author		Ramon Lawrence
 @brief		Light-weight buffer implementation for small embedded devices.
 @copyright	Copyright 2021
-			The University of British Columbia,		
+			The University of British Columbia,	
+			Ramon Lawrence	
 @par Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
 
@@ -32,12 +33,13 @@
 	POSSIBILITY OF SUCH DAMAGE.
 */
 /******************************************************************************/
-#if defined(__cplusplus)
-extern "C" {
-#endif
+#ifndef DBBUFFER_H
+#define DBBUFFER_H
 
 #include <stdint.h>
 #include <stdio.h>
+
+#include "storage.h"
 
 /* Define type for page ids (physical and logical). */
 typedef uint32_t id_t;
@@ -50,7 +52,7 @@ typedef struct {
 	void*  	buffer;					/* Allocated memory for buffer */
 	count_t	pageSize;				/* Size of buffer page */
 	count_t	numPages;				/* Number of buffer pages */    
-	FILE 	*file;					/* File for storing data records. */
+	storageState* storage;			/* Storage information for reading/writing pages */
 	id_t 	nextPageId;				/* Next logical page id. Page id is an incrementing value and may not always be same as physical page id. */
 	id_t 	nextPageWriteId;		/* Physical page id of next page to write. */	
 	id_t 	numWrites;				/* Number of page writes */
@@ -133,6 +135,5 @@ void printStats(dbbuffer *state);
 */
 void dbbufferClearStats(dbbuffer *state);
 
-#if defined(__cplusplus)
-}
+
 #endif

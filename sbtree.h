@@ -33,9 +33,8 @@
 	POSSIBILITY OF SUCH DAMAGE.
 */
 /******************************************************************************/
-#if defined(__cplusplus)
-extern "C" {
-#endif
+#ifndef SBTREE_H
+#define SBTREE_H
 
 #include <stdio.h>
 #include <stdint.h>
@@ -172,6 +171,4 @@ int8_t sbtreeFlush(sbtreeState *state);
 */
 void sbtreePrint(sbtreeState *state);
 
-#if defined(__cplusplus)
-}
 #endif
