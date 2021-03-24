@@ -207,8 +207,7 @@ void sbtreePrintNode(sbtreeState *state, int pageNum, int depth)
 	if (SBTREE_IS_INTERIOR(buf))
 	{				
 		for (c=0; c < count && c < state->maxInteriorRecordsPerPage; c++)
-		{
-			int32_t key = *((int32_t*) (buf+state->keySize * c + state->headerSize));
+		{			
 			int32_t val = *((int32_t*) (buf+state->keySize * state->maxInteriorRecordsPerPage + state->headerSize + c*sizeof(id_t)));
 			
 			sbtreePrintNode(state, val, depth+1);	
@@ -221,7 +220,7 @@ void sbtreePrintNode(sbtreeState *state, int pageNum, int depth)
 			if (depth+1 < state->levels && pageNum == state->activePath[depth])
 			{	/* Current pointer is on active path. */
 				if (state->activePath[depth+1] != val)
-					printf("%*cNode mapping. Node: %d Current: %d\n",depth*3, ' ', val, state->activePath[depth+1]);
+					printf("%*cNode mapping. Node: %lu Current: %lu\n",depth*3, ' ', val, state->activePath[depth+1]);
 				val = state->activePath[depth+1];
 			}	
 			sbtreePrintNode(state, val, depth+1);	
@@ -539,9 +538,9 @@ id_t getChildPageId(sbtreeState *state, void *buf, id_t pageId, int8_t level, id
 int8_t sbtreeGet(sbtreeState *state, void* key, void *data)
 {
 	/* Starting at root search for key */
-	int8_t l;
-	void* next, *buf;
-	id_t childNum, nextId = state->activePath[0];
+	int8_t 	l;
+	void	*buf;
+	id_t 	childNum, nextId = state->activePath[0];
 	
 	for (l=0; l < state->levels; l++)
 	{		
@@ -611,9 +610,10 @@ void sbtreeInitIterator(sbtreeState *state, sbtreeIterator *it)
 {	
 	/* Find start location */
 	/* Starting at root search for key */
-	int8_t l;
-	void* next, *buf;	
-	id_t childNum, nextId = state->activePath[0];
+	int8_t 	l;
+	void	*buf;	
+	id_t 	childNum, nextId = state->activePath[0];
+	
 	it->currentBuffer = NULL;
 
 	for (l=0; l < state->levels; l++)

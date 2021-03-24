@@ -234,9 +234,9 @@ void closeBuffer(dbbuffer *state)
 */
 void printStats(dbbuffer *state)
 {
-	printf("Num reads: %d\n", state->numReads);
-	printf("Buffer hits: %d\n", state->bufferHits);
-	printf("Num writes: %d\n", state->numWrites);
+	printf("Num reads: %lu\n", state->numReads);
+	printf("Buffer hits: %lu\n", state->bufferHits);
+	printf("Num writes: %lu\n", state->numWrites);
 }
 
 
