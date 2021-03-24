@@ -47,27 +47,26 @@
 void testIterator(sbtreeState *state)
 {
     sbtreeIterator it;
-    int mv = 40;     
+    uint32_t mv = 40;     
     it.minKey = &mv;
-    int v = 299;
-    it.maxKey = &v;   
-    void *data;
+    uint32_t v = 299;
+    it.maxKey = &v;       
 
     sbtreeInitIterator(state, &it);
     uint32_t i = 0;
-    int8_t success = 1;    
-    int32_t *itKey, *itData;
+    uint8_t success = 1;    
+    uint32_t *itKey, *itData;
 
-    while (sbtreeNext(state, &it, (void*) &itKey, (void*) &itData))
+    while (sbtreeNext(state, &it, (void**) &itKey, (void**) &itData))
     {                      
        // printf("Key: %d  Data: %d\n", *itKey, *itData);
         if (i+mv != *itKey)
         {   success = 0;
-            printf("Key: %d Error\n", *itKey);
+            printf("Key: %lu Error\n", *itKey);
         }
         i++;        
     }
-    printf("Read records: %d\n", i);
+    printf("Read records: %lu\n", i);
 
     if (success && i == (v-mv+1))
         printf("SUCCESS\n");
@@ -101,7 +100,7 @@ void runalltests_sbtree()
         printf("\nRun: %d\n", (r+1));
 
         /* Configure file storage */        
-        fileStorageState *storage = malloc(sizeof(fileStorageState));
+        fileStorageState *storage = (fileStorageState*) malloc(sizeof(fileStorageState));
         storage->fileName = "myfile.bin";
         if (fileStorageInit((storageState*) storage) != 0)
         {
@@ -120,15 +119,15 @@ void runalltests_sbtree()
         */
        
         /* Configure buffer */
-        dbbuffer* buffer = malloc(sizeof(dbbuffer));
+        dbbuffer* buffer = (dbbuffer*) malloc(sizeof(dbbuffer));
         buffer->pageSize = 512;
         buffer->numPages = M;
-        buffer->status = malloc(sizeof(id_t)*M);
+        buffer->status = (id_t*) malloc(sizeof(id_t)*M);
         buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
         buffer->storage = (storageState*) storage;       
 
         /* Configure SBTree state */
-        sbtreeState* state = malloc(sizeof(sbtreeState));
+        sbtreeState* state = (sbtreeState*) malloc(sizeof(sbtreeState));
 
         state->recordSize = 16;
         state->keySize = 4;
@@ -136,7 +135,7 @@ void runalltests_sbtree()
         state->buffer = buffer;
 
         state->tempKey = malloc(sizeof(int32_t)); 
-        int8_t* recordBuffer = malloc(state->recordSize);
+        int8_t* recordBuffer = (int8_t*) malloc(state->recordSize);
 
         /* Initialize SBTree structure */
         sbtreeInit(state);
@@ -185,7 +184,7 @@ void runalltests_sbtree()
         printStats(state->buffer);
 
         printf("Elapsed Time: %lu ms\n", times[l][r]);
-        printf("Records inserted: %d\n", numRecords);
+        printf("Records inserted: %lu\n", numRecords);
 
         /* Clear stats */
         dbbufferClearStats(state->buffer);
@@ -200,10 +199,10 @@ void runalltests_sbtree()
             int32_t key = i;
             int8_t result = sbtreeGet(state, &key, recordBuffer);
             if (result != 0) 
-                printf("ERROR: Failed to find: %d\n", key);
+                printf("ERROR: Failed to find: %lu\n", key);
             else if (*((int32_t*) recordBuffer) != key)
-            {   printf("ERROR: Wrong data for: %d\n", key);
-                printf("Key: %d Data: %d\n", key, *((int32_t*) recordBuffer));
+            {   printf("ERROR: Wrong data for: %lu\n", key);
+                printf("Key: %lu Data: %lu\n", key, *((uint32_t*) recordBuffer));
             }
 
             if (i % stepSize == 0)
@@ -231,13 +230,13 @@ void runalltests_sbtree()
         int32_t key = -1;
         int8_t result = sbtreeGet(state, &key, recordBuffer);
         if (result == 0) 
-            printf("Error1: Key found: %d\n", key);
+            printf("Error1: Key found: %lu\n", key);
 
         /* Above maximum key search */
         key = 3500000;
         result = sbtreeGet(state, &key, recordBuffer);
         if (result == 0) 
-            printf("Error2: Key found: %d\n", key);
+            printf("Error2: Key found: %lu\n", key);
         
         /* Optional: test iterator */
         testIterator(state);

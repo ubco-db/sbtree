@@ -15,9 +15,7 @@ The sequential B-tree (SBtree) efficiently stores data in a B-tree structure tha
 * test_sbtree.c - test file demonstrating how to get, put, and iterate through data in index
 * sbtree.h, sbtree.c - implementation of sequential B-tree structure supporting arbitrary key-value data items
 * dbbuffer.h, dbbuffer.c - provides buffering of pages in memory
-* fileStorage.h, fileStorage.c - support for file based storage including on SD cards
-* memStorage.h, memStorage.c - support for raw memory (NOR/NAND) storage
-* storage.h - generic storage interface
+
 
 ## Usage
 
@@ -25,8 +23,8 @@ The sequential B-tree (SBtree) efficiently stores data in a B-tree structure tha
 
 ```c
 /* Configure file-based storage. RAW flash memory storage is also possible. */
-fileStorageState *storage = malloc(sizeof(fileStorageState));
-storage->fileName = "myfile.bin";
+fileStorageState *storage = (fileStorageState*) malloc(sizeof(fileStorageState));
+storage->fileName = (char*) "myfile.bin";
 if (fileStorageInit((storageState*) storage) != 0)
 {
     printf("Error: Cannot initialize storage!\n");
@@ -34,16 +32,16 @@ if (fileStorageInit((storageState*) storage) != 0)
 }
 
 /* Configure buffer */
-dbbuffer* buffer = malloc(sizeof(dbbuffer));
+dbbuffer *buffer = (dbbuffer*) malloc(sizeof(dbbuffer));
 buffer->pageSize = 512;
 uint16_t M = 10;
 buffer->numPages = M;
-buffer->status = malloc(sizeof(id_t)*M);
+buffer->status = (id_t*) malloc(sizeof(id_t)*M);
 buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
 buffer->storage = (storageState*) storage; 
 
 /* Configure SBTree state */
-sbtreeState* state = malloc(sizeof(sbtreeState));
+sbtreeState *state = (sbtreeState*) malloc(sizeof(sbtreeState));
 
 state->recordSize = 16;
 state->keySize = 4;
