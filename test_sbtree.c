@@ -224,7 +224,7 @@ void runalltests_sbtree()
                         l = i / stepSize -1;
                         if (l < numSteps && l >= 0)
                         {
-                           times[l][r] = (clock()-start)*1000/CLOCKS_PER_SEC;
+                            times[l][r] = (clock()-start)*1000/CLOCKS_PER_SEC;
                             reads[l][r] = state->buffer->numReads;
                             writes[l][r] = state->buffer->numWrites;                    
                             hits[l][r] = state->buffer->bufferHits;                       
