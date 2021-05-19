@@ -99,6 +99,10 @@ void* readPage(dbbuffer *state, id_t pageNum)
 		{	/* Request for root. */			
 			i = 1;
 		}
+		else if (state->numPages == 3)
+		{
+			i = 2;
+		}
 		else
 		{
 			/* More than minimum pages. Some basic memory management using round robin buffer. */		

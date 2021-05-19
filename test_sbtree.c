@@ -83,8 +83,8 @@ void runalltests_sbtree()
 {
     printf("\nSTARTING SEQUENTIAL B-TREE TESTS.\n");
 
-    int8_t M = 5;    
-    int32_t numRecords = 100000;
+    int8_t M = 3;    
+    int32_t numRecords = 10000;
     uint32_t numSteps = 10, stepSize = numRecords / numSteps;
     count_t r, numRuns = 1, l;
     uint32_t times[numSteps][numRuns];
@@ -94,7 +94,7 @@ void runalltests_sbtree()
     uint32_t rtimes[numSteps][numRuns];
     uint32_t rreads[numSteps][numRuns];
     uint32_t rhits[numSteps][numRuns];    
-    int8_t  seqdata = 0;
+    int8_t  seqdata = 1;
     FILE    *infile;
     uint32_t minRange, maxRange;
 
@@ -251,7 +251,7 @@ void runalltests_sbtree()
 
         /* Clear stats */
         dbbufferClearStats(state->buffer);
-        // sbtreePrint(state);        
+        sbtreePrint(state);        
 
         printf("\nQuery test:\n");
         start = clock();
@@ -274,6 +274,7 @@ void runalltests_sbtree()
                 {                           
                     // btreePrint(state);               
                     l = i / stepSize - 1;
+                   // printf("Num: %lu KEY: %lu\n", i, key);     
                     if (l < numSteps && l >= 0)
                     {
                         rtimes[l][r] = (clock()-start)*1000/CLOCKS_PER_SEC;
