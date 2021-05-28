@@ -92,6 +92,7 @@ typedef struct {
 	void 	*tempKey;							/* Used to temporarily store a key value. Space must be preallocated. */
 	dbbuffer *buffer;							/* Pre-allocated memory buffer for use by algorithm */
 	void	*writeBuffer;						/* Pointer to in-memory write buffer */
+	id_t	numNodes;							/* Number of nodes in tree */
 } sbtreeState;
 
 typedef struct {

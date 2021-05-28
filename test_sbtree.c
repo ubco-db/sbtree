@@ -94,7 +94,7 @@ void runalltests_sbtree()
     uint32_t rtimes[numSteps][numRuns];
     uint32_t rreads[numSteps][numRuns];
     uint32_t rhits[numSteps][numRuns];    
-    int8_t  seqdata = 1;
+    int8_t  seqdata = 0;
     FILE    *infile;
     uint32_t minRange, maxRange;
 
@@ -110,7 +110,7 @@ void runalltests_sbtree()
         infile = fopen("data/uwa500K.bin", "r+b");
         minRange = 946713600;
         maxRange = 977144040;
-        numRecords = 500000;
+        numRecords = 100000;
 
         stepSize = numRecords / numSteps;
     }
@@ -230,12 +230,17 @@ void runalltests_sbtree()
                             hits[l][r] = state->buffer->bufferHits;                       
                         }
                     }  
-                    i++;  
+                    i++; 
+                    /* Allows stopping at set number of records instead of reading entire file */
+                    if (i == numRecords)
+                    {   maxRange = *((uint32_t*) buf);
+                        goto doneread;              
+                    } 
                 }
             }  
             numRecords = i;    
         }
-    
+doneread:  
         sbtreeFlush(state);    
 
         clock_t end = clock();
@@ -251,8 +256,9 @@ void runalltests_sbtree()
 
         /* Clear stats */
         dbbufferClearStats(state->buffer);
-        sbtreePrint(state);        
-
+        // sbtreePrint(state);        
+        printf("Number of tree nodes: %lu\n", state->numNodes);
+        
         printf("\nQuery test:\n");
         start = clock();
 

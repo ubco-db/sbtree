@@ -103,6 +103,7 @@ void sbtreeInit(sbtreeState *state)
 //	state->maxRecordsPerPage = 10;
 //	state->maxInteriorRecordsPerPage = 3;	
 	state->levels = 1;
+	state->numNodes = 0;
 
 	/* Create and write empty root node */
 	state->writeBuffer = initBufferPage(state->buffer, 0);
@@ -279,6 +280,7 @@ int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageN
 				state->activePath[l]  = writePage(state->buffer, buf);				
 			}
 		
+			state->numNodes++;
 			initBufferPage(state->buffer, 0);
 			SBTREE_SET_INTERIOR(state->writeBuffer);
 			buf = state->writeBuffer;
@@ -363,6 +365,7 @@ int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageN
 			state->activePath[l] = state->activePath[l-1]; 
 		state->activePath[0] = writePage(state->buffer, state->writeBuffer);	/* Store root location */			
 		state->levels++;
+		state->numNodes++;
 	}
 	return 0;
 }
@@ -395,7 +398,8 @@ int8_t sbtreePut(sbtreeState *state, void* key, void *data)
 			return -1;
 
 		count = 0;			
-		initBufferPage(state->buffer, 0);					
+		initBufferPage(state->buffer, 0);	
+		state->numNodes++; 				
 	}
 
 	/* Copy record onto page */
