@@ -10,6 +10,9 @@ The sequential B-tree (SBtree) efficiently stores data in a B-tree structure tha
 6. Easy to use and include in existing projects. 
 7. Open source license. Free to use for commerical and open source projects.
 
+## License
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+
 ## Code Files
 
 * test_sbtree.c - test file demonstrating how to get, put, and iterate through data in index
