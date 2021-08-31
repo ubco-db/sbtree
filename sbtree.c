@@ -263,7 +263,9 @@ int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageN
 
 	for (l=state->levels-1; l >= 0; l--)
 	{
-		buf = readPageBuffer(state->buffer, state->activePath[l], 0);
+		/* Forcing all reads to buffer 0 guarantees no read conflicts but results in more I/Os */
+		// buf = readPageBuffer(state->buffer, state->activePath[l], 0);
+		buf = readPage(state->buffer, state->activePath[l]);	
 		if (buf == NULL)
 			return -1;		
 		
@@ -279,7 +281,11 @@ int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageN
 				memcpy(buf + state->keySize * state->maxInteriorRecordsPerPage + sizeof(id_t) * (count) + state->headerSize, &prevPageNum, sizeof(id_t));											
 				state->activePath[l]  = writePage(state->buffer, buf);				
 			}
-		
+			else
+			{	/* If using deferred update, must write out full node */
+			 	state->activePath[l]  = writePage(state->buffer, buf);
+			}
+
 			state->numNodes++;
 			initBufferPage(state->buffer, 0);
 			SBTREE_SET_INTERIOR(state->writeBuffer);
@@ -296,7 +302,7 @@ int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageN
 			memcpy(buf + state->keySize * state->maxInteriorRecordsPerPage + state->headerSize, &pageNum, sizeof(id_t));
 
 			/* Write page. Update active page mapping. */
-			prevPageNum = state->activePath[l];
+			prevPageNum = state->activePath[l];			
 			state->activePath[l] = writePage(state->buffer, buf);												
 			pageNum = state->activePath[l];						
 		}
@@ -339,7 +345,11 @@ int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageN
 
 			/* Write updated interior page */								
 			/* Update location of page */
-			state->activePath[l] = writePage(state->buffer, buf);				
+			// state->activePath[l] = writePage(state->buffer, buf);
+
+			/* Deferring write and keeping updated page in buffer. */
+			/* Note: Requires writing page and updating active path if buffer is used for reading. */							
+			dbbufferSetModified(state->buffer, buf, l);					
 			break;
 		}		
 	}		 
@@ -365,7 +375,7 @@ int8_t sbtreeUpdateIndex(sbtreeState *state, void *minkey, void *key, id_t pageN
 			state->activePath[l] = state->activePath[l-1]; 
 		state->activePath[0] = writePage(state->buffer, state->writeBuffer);	/* Store root location */			
 		state->levels++;
-		state->numNodes++;
+		state->numNodes++;		
 	}
 	return 0;
 }

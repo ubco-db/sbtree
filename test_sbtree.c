@@ -143,6 +143,7 @@ void runalltests_sbtree()
         buffer->pageSize = 512;
         buffer->numPages = M;
         buffer->status = (id_t*) malloc(sizeof(id_t)*M);
+        buffer->modified = (uint8_t*) malloc(sizeof(uint8_t)*M);
         buffer->buffer  = malloc((size_t) buffer->numPages * buffer->pageSize);   
         buffer->storage = (storageState*) storage;       
 
@@ -234,6 +235,7 @@ void runalltests_sbtree()
                     /* Allows stopping at set number of records instead of reading entire file */
                     if (i == numRecords)
                     {   maxRange = *((uint32_t*) buf);
+                        printf("Num: %lu KEY: %lu\n", i, *((int32_t*) buf));     
                         goto doneread;              
                     } 
                 }
@@ -248,7 +250,7 @@ doneread:
         times[l][r] = (end-start)*1000/CLOCKS_PER_SEC;
         reads[l][r] = state->buffer->numReads;
         writes[l][r] = state->buffer->numWrites;        
-        hits[l][r] = state->buffer->bufferHits; 
+        hits[l][r] = state->buffer->bufferHits;           
         printStats(state->buffer);
 
         printf("Elapsed Time: %lu ms\n", times[l][r]);
@@ -295,7 +297,7 @@ doneread:
             char infileBuffer[512];
             int8_t headerSize = 16;
             i = 0;
-            int8_t queryType = 2;
+            int8_t queryType = 1;
 
             if (queryType == 1)
             {   /* Query each record from original data set. */
@@ -337,8 +339,12 @@ doneread:
                             }
                         }     
                         i++;  
+                        if (i == numRecords)    /* Allows ending test after set number of records rather than processing entire file */
+                            goto donetest;
                     }
                 }  
+                donetest:
+                    numRecords = i;
             }
             else if (queryType == 2)
             {   /* Query random values in range. May not exist in data set. */
